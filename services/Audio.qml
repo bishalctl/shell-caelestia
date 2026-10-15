@@ -7,6 +7,7 @@ import Quickshell.Services.Pipewire
 import Caelestia
 import Caelestia.Config
 import Caelestia.Services
+import qs.components.misc
 import qs.services
 
 Singleton {
@@ -14,6 +15,10 @@ Singleton {
 
     property string previousSinkName: ""
     property string previousSourceName: ""
+
+    // Bumped only by user/IPC intent (setters below) — the OSD pops on this,
+    // never on restores or external volume churn.
+    property int userChangeSerial: 0
 
     property list<PwNode> sinks: []
     property list<PwNode> sources: []
@@ -35,7 +40,16 @@ Singleton {
         if (sink?.ready && sink?.audio) {
             sink.audio.muted = false;
             sink.audio.volume = Math.max(0, Math.min(GlobalConfig.services.maxVolume, newVolume));
-            AudioPersist.rememberSinkVolume(sink, sink.audio.volume);
+            AudioPersist.sinkVolumeSet(sink, sink.audio.volume);
+            userChangeSerial++;
+        }
+    }
+
+    function setMuted(muted: bool): void {
+        if (sink?.ready && sink?.audio) {
+            sink.audio.muted = muted;
+            AudioPersist.sinkMutedSet(sink, muted);
+            userChangeSerial++;
         }
     }
 
@@ -51,7 +65,16 @@ Singleton {
         if (source?.ready && source?.audio) {
             source.audio.muted = false;
             source.audio.volume = Math.max(0, Math.min(GlobalConfig.services.maxVolume, newVolume));
-            AudioPersist.rememberSourceVolume(source, source.audio.volume);
+            AudioPersist.sourceVolumeSet(source, source.audio.volume);
+            userChangeSerial++;
+        }
+    }
+
+    function setSourceMuted(muted: bool): void {
+        if (source?.ready && source?.audio) {
+            source.audio.muted = muted;
+            AudioPersist.sourceMutedSet(source, muted);
+            userChangeSerial++;
         }
     }
 
@@ -64,33 +87,35 @@ Singleton {
     }
 
     function setAudioSink(newSink: PwNode): void {
-        Pipewire.preferredDefaultAudioSink = newSink;
+        AudioDevices.selectSink(newSink);
     }
 
     function setAudioSource(newSource: PwNode): void {
-        Pipewire.preferredDefaultAudioSource = newSource;
+        AudioDevices.selectSource(newSource);
     }
 
     function cycleNextAudioOutput(): void {
-        if (sinks.length === 0)
+        const outputs = sinks.filter(n => n?.name && n.name !== "notification_sink" && !AudioDevices.isSinkBlocked(n.name));
+        if (outputs.length === 0)
             return;
 
-        const currentIndex = sinks.findIndex(s => s === sink);
-        const nextIndex = (currentIndex + 1) % sinks.length;
-        setAudioSink(sinks[nextIndex]);
+        const currentIndex = outputs.findIndex(s => s === sink);
+        const nextIndex = (currentIndex + 1) % outputs.length;
+        setAudioSink(outputs[nextIndex]);
     }
 
     function setStreamVolume(stream: PwNode, newVolume: real): void {
         if (stream?.ready && stream?.audio) {
             stream.audio.muted = false;
             stream.audio.volume = Math.max(0, Math.min(GlobalConfig.services.maxVolume, newVolume));
-            AudioPersist.rememberStreamVolume(stream, stream.audio.volume);
+            AudioPersist.streamVolumeSet(stream, stream.audio.volume);
         }
     }
 
     function setStreamMuted(stream: PwNode, muted: bool): void {
         if (stream?.ready && stream?.audio) {
             stream.audio.muted = muted;
+            AudioPersist.streamMutedSet(stream, muted);
         }
     }
 
@@ -183,5 +208,39 @@ Singleton {
         }
 
         target: "audio"
+    }
+
+    // Volume keys route here (hyprland global dispatchers) so keyboard changes
+    // hit the same setters as sliders: persisted, clamped, and OSD-popping.
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "volumeUp"
+        description: "Increase volume"
+        onPressed: root.incrementVolume()
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "volumeDown"
+        description: "Decrease volume"
+        onPressed: root.decrementVolume()
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "volumeMute"
+        description: "Toggle output mute"
+        onPressed: root.setMuted(!root.muted)
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "micMute"
+        description: "Toggle microphone mute"
+        onPressed: root.setSourceMuted(!root.sourceMuted)
     }
 }

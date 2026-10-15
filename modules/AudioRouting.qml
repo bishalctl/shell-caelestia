@@ -14,6 +14,7 @@ Item {
     // Same for AudioPersist: constructing it loads the saved volumes and restores them
     // (default sink/source, music pair, app streams, ALSA hardware) at boot.
     readonly property bool persistLoaded: AudioPersist.loaded
+    readonly property bool devicesLoaded: AudioDevices.loaded
 
     Component.onCompleted: VirtualSink.pinLoopbacks()
 }

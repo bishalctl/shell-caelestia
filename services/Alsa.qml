@@ -30,7 +30,7 @@ Singleton {
     // Slider position for Headphone/AUX: the control reads 0 while nothing is plugged
     // into the jack, so fall back to the last persisted volume — the row's icon still
     // shows the disconnected/muted state.
-    readonly property int headphoneDisplayVolume: headphoneVolume > 0 ? headphoneVolume : Math.round(Math.max(0, (AudioPersist.volumes["alsa:Headphone"] ?? 0) * 100))
+    readonly property int headphoneDisplayVolume: headphoneVolume > 0 ? headphoneVolume : Math.round(Math.max(0, (AudioPersist.state.alsa["Headphone"]?.vol ?? 0) * 100))
 
     function setVolume(control: string, percent: int): void {
         const clamped = Math.max(0, Math.min(100, Math.round(percent)));
@@ -43,7 +43,7 @@ Singleton {
             root.headphoneVolume = clamped;
         _pendingVol = ["amixer", "-D", root.card, "set", control, `${clamped}%`];
         volDebounce.restart();
-        AudioPersist.remember(`alsa:${control}`, clamped / 100);
+        AudioPersist.alsaVolumeSet(control, clamped / 100);
     }
 
     function setMuted(control: string, muted: bool): void {
@@ -55,6 +55,7 @@ Singleton {
             root.headphoneMuted = muted;
         muteProc.command = ["amixer", "-D", root.card, "set", control, muted ? "mute" : "unmute"];
         muteProc.running = true;
+        AudioPersist.alsaMutedSet(control, muted);
     }
 
     function refresh(): void {
@@ -74,24 +75,36 @@ Singleton {
     function _applySaved(): void {
         const cmds = [];
         for (const c of ["Master", "Speaker", "Headphone"]) {
-            const v = AudioPersist.recall(`alsa:${c}`);
-            if (v < 0)
+            const saved = AudioPersist.recallAlsa(c);
+            if (!saved)
                 continue;
-            const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
             const hw = c === "Master" ? root.masterVolume : c === "Speaker" ? root.speakerVolume : root.headphoneVolume;
-            if (pct === hw)
-                continue;
-            cmds.push(`amixer -D ${root.card} set ${c} ${pct}% 2>/dev/null`);
-            // Optimistic; the next periodic read reconciles.
-            if (c === "Master")
-                root.masterVolume = pct;
-            else if (c === "Speaker")
-                root.speakerVolume = pct;
-            else
-                root.headphoneVolume = pct;
+            const hwMuted = c === "Master" ? root.masterMuted : c === "Speaker" ? root.speakerMuted : root.headphoneMuted;
+            if (saved.vol >= 0) {
+                const pct = Math.max(0, Math.min(100, Math.round(saved.vol * 100)));
+                if (pct !== hw) {
+                    cmds.push(`amixer -D ${root.card} set ${c} ${pct}% 2>/dev/null`);
+                    // Optimistic; the next periodic read reconciles.
+                    if (c === "Master")
+                        root.masterVolume = pct;
+                    else if (c === "Speaker")
+                        root.speakerVolume = pct;
+                    else
+                        root.headphoneVolume = pct;
+                }
+            }
+            if (saved.muted !== undefined && !!saved.muted !== hwMuted) {
+                cmds.push(`amixer -D ${root.card} set ${c} ${saved.muted ? "mute" : "unmute"} 2>/dev/null`);
+                if (c === "Master")
+                    root.masterMuted = !!saved.muted;
+                else if (c === "Speaker")
+                    root.speakerMuted = !!saved.muted;
+                else
+                    root.headphoneMuted = !!saved.muted;
+            }
         }
         if (cmds.length > 0) {
-            console.log(`[Alsa] restore: ${cmds.length} control(s)`);
+            console.log(`[Alsa] restore: ${cmds.length} change(s)`);
             restoreProc.command = ["sh", "-c", cmds.join("; ")];
             restoreProc.running = true;
         }

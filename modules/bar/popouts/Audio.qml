@@ -24,16 +24,6 @@ Item {
     // Cap the popout height; everything past this scrolls inside the Flickable.
     readonly property real maxHeight: 700
 
-    implicitWidth: 400
-    implicitHeight: Math.min(column.implicitHeight, maxHeight)
-
-    // ALSA reads only run while the popout is open; pin the virtual-sink loopbacks on open too.
-    Component.onCompleted: {
-        Alsa.refCount++;
-        VirtualSink.pinLoopbacks();
-    }
-    Component.onDestruction: Alsa.refCount--
-
     function volIcon(vol: real, muted: bool): string {
         if (muted || vol <= 0.001)
             return "volume_off";
@@ -43,6 +33,16 @@ Item {
             return "volume_down";
         return "volume_up";
     }
+
+    implicitWidth: 400
+    implicitHeight: Math.min(column.implicitHeight, maxHeight)
+
+    // ALSA reads only run while the popout is open; pin the virtual-sink loopbacks on open too.
+    Component.onCompleted: {
+        Alsa.refCount++;
+        VirtualSink.pinLoopbacks();
+    }
+    Component.onDestruction: Alsa.refCount--
 
     Flickable {
         id: flick
@@ -87,7 +87,7 @@ Item {
                     onMoved: v => Audio.setVolume(v)
                     onToggle: {
                         if (Audio.sink?.ready && Audio.sink?.audio)
-                            Audio.sink.audio.muted = !Audio.muted;
+                            Audio.setMuted(!Audio.muted);
                     }
                 }
 
@@ -112,6 +112,7 @@ Item {
                             required property PwNode modelData
 
                             label: modelData.description || modelData.name
+                            deviceName: modelData.name
                             selected: Audio.sink?.id === modelData.id
                             onClicked: Audio.setAudioSink(modelData)
                         }
@@ -142,7 +143,7 @@ Item {
                     onMoved: v => Audio.setSourceVolume(v)
                     onToggle: {
                         if (Audio.source?.ready && Audio.source?.audio)
-                            Audio.source.audio.muted = !Audio.sourceMuted;
+                            Audio.setSourceMuted(!Audio.sourceMuted);
                     }
                 }
 
@@ -164,6 +165,8 @@ Item {
                             required property PwNode modelData
 
                             label: modelData.description || modelData.name
+                            deviceName: modelData.name
+                            inputDevice: true
                             selected: Audio.source?.id === modelData.id
                             onClicked: Audio.setAudioSource(modelData)
                         }
@@ -220,13 +223,13 @@ Item {
                 visible: VirtualSink.available
 
                 StyledText {
-                    text: qsTr("Virtual Sinks")
+                    text: qsTr("Music Virtual Sync Output")
                     font.weight: 500
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: qsTr("Music: %1").arg(VirtualSink.musicOutputLabel)
+                    text: qsTr("Output: %1").arg(VirtualSink.musicOutputLabel)
                     elide: Text.ElideRight
                     font.pointSize: Tokens.font.size.small
                     color: Colours.palette.m3onSurfaceVariant
@@ -260,6 +263,7 @@ Item {
                             required property PwNode modelData
 
                             label: modelData.description || modelData.name
+                            deviceName: modelData.name
                             selected: VirtualSink.musicOutput === modelData.name
                             onClicked: VirtualSink.setMusicOutput(modelData)
                         }
@@ -454,6 +458,8 @@ Item {
         id: dr
 
         property string label
+        required property string deviceName
+        property bool inputDevice: false
         property bool selected
 
         signal clicked
@@ -489,6 +495,11 @@ Item {
                 text: dr.label
                 elide: Text.ElideRight
                 color: dr.selected ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+            }
+
+            AudioDeviceBlockButton {
+                deviceName: dr.deviceName
+                inputDevice: dr.inputDevice
             }
         }
     }

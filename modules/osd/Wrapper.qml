@@ -51,23 +51,29 @@ Item {
     }
 
     Connections {
-        function onMutedChanged(): void {
+        // Pop only on user/IPC intent — persistence restores and external churn
+        // also move volumes, and the OSD shouldn't flash for those.
+        function onUserChangeSerialChanged(): void {
             root.show();
+            root.volume = Audio.volume;
+            root.muted = Audio.muted;
+            root.sourceVolume = Audio.sourceVolume;
+            root.sourceMuted = Audio.sourceMuted;
+        }
+
+        function onMutedChanged(): void {
             root.muted = Audio.muted;
         }
 
         function onVolumeChanged(): void {
-            root.show();
             root.volume = Audio.volume;
         }
 
         function onSourceMutedChanged(): void {
-            root.show();
             root.sourceMuted = Audio.sourceMuted;
         }
 
         function onSourceVolumeChanged(): void {
-            root.show();
             root.sourceVolume = Audio.sourceVolume;
         }
 

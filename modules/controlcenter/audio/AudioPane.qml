@@ -88,6 +88,8 @@ Item {
                                 model: Audio.sinks
 
                                 delegate: StyledRect {
+                                    id: outputDeviceRow
+
                                     required property var modelData
 
                                     Layout.fillWidth: true
@@ -125,6 +127,10 @@ Item {
 
                                             text: modelData.description || qsTr("Unknown")
                                             font.weight: Audio.sink?.id === modelData.id ? 500 : 400
+                                        }
+
+                                        AudioDeviceBlockButton {
+                                            deviceName: outputDeviceRow.modelData.name
                                         }
                                     }
                                 }
@@ -165,6 +171,8 @@ Item {
                                 model: Audio.sources
 
                                 delegate: StyledRect {
+                                    id: inputDeviceRow
+
                                     required property var modelData
 
                                     Layout.fillWidth: true
@@ -202,6 +210,11 @@ Item {
 
                                             text: modelData.description || qsTr("Unknown")
                                             font.weight: Audio.source?.id === modelData.id ? 500 : 400
+                                        }
+
+                                        AudioDeviceBlockButton {
+                                            deviceName: inputDeviceRow.modelData.name
+                                            inputDevice: true
                                         }
                                     }
                                 }
@@ -320,7 +333,7 @@ Item {
                                     StateLayer {
                                         onClicked: {
                                             if (Audio.sink?.audio) {
-                                                Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                                                Audio.setMuted(!Audio.muted);
                                             }
                                         }
                                     }
@@ -438,7 +451,7 @@ Item {
                                     StateLayer {
                                         onClicked: {
                                             if (Audio.source?.audio) {
-                                                Audio.source.audio.muted = !Audio.source.audio.muted;
+                                                Audio.setSourceMuted(!Audio.sourceMuted);
                                             }
                                         }
                                     }

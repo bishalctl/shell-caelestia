@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
+import "audio/Policy.js" as AudioPolicy
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -19,8 +20,8 @@ import qs.utils
 //   notification_sink      -> notification_sink.output -> ALL physical sinks (alert bus)
 //
 // Output selection is a small state machine: persisted across reboots, auto-switches to a newly
-// connected device, falls back through an MRU stack when one disconnects, and always keeps
-// exactly one valid device selected.
+// connected device, and falls back through an MRU stack when one disconnects.
+// Blocked devices are never automatic candidates, but remain manually selectable.
 Singleton {
     id: root
 
@@ -45,7 +46,7 @@ Singleton {
     property var outputStack: []
 
     readonly property PwNode musicOutputNode: physicalSinks.find(n => n?.name === root.musicOutput) ?? null
-    // "Music: <name>" label (B)
+    // "Output: <name>" label (B)
     readonly property string musicOutputLabel: musicOutputNode?.description ?? musicOutputNode?.name ?? qsTr("None")
 
     // The "Music" slider (C) is the SELECTED OUTPUT DEVICE's volume — not music_sink's.
@@ -55,20 +56,21 @@ Singleton {
     readonly property real notificationVolume: notificationSink?.audio?.volume ?? 0
     readonly property bool notificationMuted: !!notificationSink?.audio?.muted
 
-    // music_sink's own volume — persisted only (it's a null-sink recreated at unity each boot,
-    // and it's what the Main Sound slider drives whenever Music Virtual Sink is the default).
+    // music_sink's own volume. Its persistence lives in AudioPersist's PAIR state
+    // (per selected output), not here — this is just the live value for the UI.
     readonly property real musicSinkVolume: musicSink?.audio?.volume ?? 0
 
     property bool _stateLoaded: false
     property bool _inited: false
     property var _prevSinkNames: []
-    property real _savedMusicSinkVol: -1
     property real _savedNotifVol: -1
-    // Saved volumes are restored to the null-sinks exactly ONCE (when they first become ready),
-    // never re-applied afterwards — otherwise every notification/device change would clobber a
-    // volume the user just set on the slider.
-    property bool _musicVolRestored: false
+    // The notification sink's saved volume is restored exactly ONCE (when it first becomes
+    // ready), never re-applied afterwards — otherwise every notification/device change would
+    // clobber a volume the user just set on the slider.
     property bool _notifVolRestored: false
+    property bool _relinkPending: false
+    property bool _resetMusicRoute: false
+    readonly property var musicLinks: Pipewire.links.values.filter(link => link.source === root.musicLoopback)
 
     // ── Selected-output volume/mute (C) ──────────────────────────────────────────
     function setOutputVolume(v: real): void {
@@ -76,13 +78,15 @@ Singleton {
             musicOutputNode.audio.muted = false;
             musicOutputNode.audio.volume = Math.max(0, Math.min(GlobalConfig.services.maxVolume, v));
             // Pair key (music_sink + this output) — separate from the device's direct volume.
-            AudioPersist.rememberMusicVolume(musicOutputNode, musicOutputNode.audio.volume);
+            AudioPersist.outputVolumeSet(root.musicOutput, musicOutputNode.audio.volume);
         }
     }
 
     function setOutputMuted(m: bool): void {
-        if (musicOutputNode?.ready && musicOutputNode?.audio)
+        if (musicOutputNode?.ready && musicOutputNode?.audio) {
             musicOutputNode.audio.muted = m;
+            AudioPersist.outputMutedSet(root.musicOutput, m);
+        }
     }
 
     // ── Notification (alert bus) ─────────────────────────────────────────────────
@@ -114,53 +118,36 @@ Singleton {
 
     // User manually picks a music output device.
     function setMusicOutput(node: PwNode): void {
-        if (node?.name)
+        if (node?.name) {
+            // Explicitly reselecting the current device remains a force-refresh.
+            root._resetMusicRoute = root._resetMusicRoute || root.musicOutput === node.name;
             _selectOutput(node.name);
+        }
     }
 
     // Apply a selection: record it (MRU front), route music_sink.output -> it, persist.
     function _selectOutput(name: string): void {
         console.log(`[VirtualSink] route music -> ${name}`);
         root.musicOutput = name;
-        root.outputStack = [name, ...root.outputStack.filter(n => n !== name)];
-        relinkProc.command = ["sh", "-c", root._relinkScript(root.musicLoopbackName, [name])];
-        relinkProc.running = true;
+        root.outputStack = AudioPolicy.recent(root.outputStack, name);
+        // Serialize relinks: Process cannot start another command while running.
+        root.ensureMusicRoute();
         root.save();
     }
 
     // Selection state machine. Decides which physical device music routes to whenever the device
-    // set changes (and at startup), then applies it. Guarantees one valid selection at all times.
+    // set changes (and at startup), then applies it when an eligible device exists.
     function _reconcileOutput(): void {
-        if (!_stateLoaded)
+        if (!_stateLoaded || !AudioDevices.loaded)
             return;
 
         const curr = physicalSinks.map(n => n.name).filter(Boolean);
-        if (curr.length === 0) {
-            // Everything dropped out (e.g. mid Bluetooth renegotiation). Keep the saved
-            // selection so we can restore it when devices return; don't clear it.
-            root._prevSinkNames = [];
-            return;
-        }
-
-        const prev = root._prevSinkNames;
-        const added = curr.filter(n => !prev.includes(n));
-
-        let target;
-        if (_inited && prev.length > 0 && added.length > 0)
-            // A genuinely new device connected at runtime -> switch to it (newest wins).
-            target = added[added.length - 1];
-        else if (root.musicOutput && curr.includes(root.musicOutput))
-            // Current selection still present -> keep it.
-            target = root.musicOutput;
-        else
-            // Startup restore, or current device gone -> first available in MRU order, else first device.
-            target = root.outputStack.find(n => curr.includes(n)) ?? curr[0];
-
+        const target = AudioPolicy.musicOutput(root.musicOutput, curr, root._prevSinkNames, root.outputStack, AudioDevices.blockedSinks, root._inited);
         root._prevSinkNames = curr;
-        console.log(`[VirtualSink] reconcile curr=[${curr}] added=[${added}] inited=${_inited} cur=${root.musicOutput} -> ${target}`);
 
         // Re-route on change, and once on first init even if unchanged (boot may not be linked yet).
-        if (target && (target !== root.musicOutput || !_inited))
+        // Empty means no eligible device; retain history, but never route to a blocked fallback.
+        if (target !== root.musicOutput || !_inited)
             _selectOutput(target);
     }
 
@@ -172,13 +159,58 @@ Singleton {
         notifLinkProc.running = true;
     }
 
-    // Disconnect every existing link from <out>:output_* then link it to each target's
-    // :playback_FL/FR. awk pairs each source output port with its `|->` target.
+    // Reconcile actual ports, not just the saved selection. Leave healthy links
+    // alone: starting a game or repairing a missing channel must not interrupt audio.
     function _relinkScript(out: string, targets: var): string {
-        let s = `pw-link -l 2>/dev/null | awk -v o="${out}" '/^[^[:space:]]/ { src = ($1 ~ "^"o":output_") ? $1 : ""; next } /\\|->/ && src != "" { print src, $2 }' | while read -r src tgt; do pw-link -d "$src" "$tgt" 2>/dev/null; done; `;
-        for (const tgt of targets)
-            s += `pw-link "${out}:output_FL" "${tgt}:playback_FL" 2>/dev/null; pw-link "${out}:output_FR" "${tgt}:playback_FR" 2>/dev/null; `;
+        const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
+        const pairs = [];
+        for (const tgt of targets) {
+            pairs.push([`${out}:output_FL`, `${tgt}:playback_FL`]);
+            pairs.push([`${out}:output_FR`, `${tgt}:playback_FR`]);
+        }
+        let s = `links=$(pw-link -l 2>/dev/null | awk -v o=${quote(out)} '/^[^[:space:]]/ { src = index($1, o ":output_") == 1 ? $1 : ""; next } /\\|->/ && src != "" { print src, $2 }');\n`;
+        s += 'while read -r src tgt; do\n[ -n "$src" ] || continue\n';
+        if (pairs.length > 0)
+            s += `case "$src $tgt" in ${pairs.map(p => quote(p.join(" "))).join("|")}) continue ;; esac\n`;
+        s += 'pw-link -d "$src" "$tgt" 2>/dev/null\ndone <<CAELESTIA_LINKS\n$links\nCAELESTIA_LINKS\n';
+        for (const pair of pairs)
+            s += `printf '%s\\n' "$links" | grep -Fx -- ${quote(pair.join(" "))} >/dev/null || pw-link ${quote(pair[0])} ${quote(pair[1])} 2>/dev/null\n`;
+        s += "exit 0\n";
         return s;
+    }
+
+    function ensureMusicRoute(): void {
+        root._relinkPending = true;
+        relinkDebounce.restart();
+    }
+
+    function _runRelink(): void {
+        if (relinkProc.running || !root._relinkPending)
+            return;
+        root._relinkPending = false;
+        const reset = root._resetMusicRoute ? "(\n" + root._relinkScript(root.musicLoopbackName, []) + ")\n" : "";
+        root._resetMusicRoute = false;
+        relinkProc.command = ["sh", "-c", reset + root._relinkScript(root.musicLoopbackName, root.musicOutput ? [root.musicOutput] : [])];
+        relinkProc.running = true;
+    }
+
+    function checkMusicRoute(): void {
+        if (!root._stateLoaded || !AudioDevices.loaded || !root.musicLoopback?.ready)
+            return;
+        const links = root.musicLinks;
+        if (!root.musicOutput) {
+            if (links.length > 0)
+                root.ensureMusicRoute();
+            return;
+        }
+        if (!root.musicOutputNode?.ready)
+            return;
+        // Existing ports can survive a failed negotiation. Those links must be
+        // recreated; simply checking that their names exist is not enough.
+        if (links.some(link => link.state === PwLinkState.Error || link.state === PwLinkState.Unlinked))
+            root._resetMusicRoute = true;
+        if (root._resetMusicRoute || links.length !== 2 || links.some(link => link.target !== root.musicOutputNode))
+            root.ensureMusicRoute();
     }
 
     function save(): void {
@@ -187,29 +219,25 @@ Singleton {
         stateFile.setText(JSON.stringify({
             musicOutput: root.musicOutput,
             outputStack: root.outputStack,
-            musicSinkVolume: root.musicSinkVolume,
             notificationVolume: root.notificationVolume
         }));
     }
 
-    // Restore each null-sink's saved volume EXACTLY ONCE, when it first becomes ready. After that
-    // the user owns the slider — we never write the volume again, so notifications/device changes
-    // can't snap it back to the boot value.
+    // Restore the notification sink's saved volume EXACTLY ONCE, when it first becomes ready.
+    // After that the user owns the slider — we never write the volume again, so notifications/
+    // device changes can't snap it back to the boot value. (music_sink's volume is restored
+    // per-pair by AudioPersist.)
     function _restoreVolumes(): void {
         if (!_notifVolRestored && _savedNotifVol >= 0 && notificationSink?.ready && notificationSink?.audio) {
             notificationSink.audio.volume = _savedNotifVol;
             _notifVolRestored = true;
-        }
-        if (!_musicVolRestored && _savedMusicSinkVol >= 0 && musicSink?.ready && musicSink?.audio) {
-            musicSink.audio.volume = _savedMusicSinkVol;
-            _musicVolRestored = true;
         }
     }
 
     // Sinks changed (device connect/disconnect): re-decide the output, re-fan notifications, pin
     // loopbacks. _reconcileOutput reads _inited to tell the first (restore) pass from runtime ones.
     function _update(): void {
-        if (!_stateLoaded)
+        if (!_stateLoaded || !AudioDevices.loaded)
             return;
         pinLoopbacks();
         _reconcileOutput();
@@ -218,34 +246,45 @@ Singleton {
         _inited = true;
     }
 
-    // Streams changed (loopbacks appearing, an app/sound starting): only keep the loopbacks pinned
-    // and do the one-time volume restore. Crucially does NOT touch the notification volume or
-    // re-link — so playing a notification sound can't reset the slider the user set.
+    // New app/game streams can recreate ports or disturb WirePlumber's links.
+    // Repair the selected route without restoring/changing any user volumes.
     function _onStreams(): void {
         if (!_stateLoaded)
             return;
         pinLoopbacks();
         _restoreVolumes();
+        root.checkMusicRoute();
     }
 
-    onMusicSinkVolumeChanged: saveDebounce.restart()
     onNotificationVolumeChanged: saveDebounce.restart()
+    onMusicLinksChanged: routeCheck.restart()
+
+    PwObjectTracker {
+        objects: root.musicLinks
+    }
 
     // Any sink change (device connect/disconnect, BT profile switch) re-evaluates the selection.
     // Driven off Audio.sinks directly because a bound list<> property's own change signal isn't
     // always emitted reliably. Debounced so Bluetooth renegotiation bursts don't spam pw-link.
     Connections {
-        target: Audio
+        function onLoadedChanged(): void {
+            sinksDebounce.restart();
+        }
 
+        target: AudioDevices
+    }
+
+    Connections {
         function onSinksChanged(): void {
             sinksDebounce.restart();
         }
 
-        // Loopback "*.output" nodes live in Audio.streams; re-run the lightweight path so they get
-        // pinned once present, without touching volume or routing on every app/sound stream.
+        // Loopback "*.output" nodes live in Audio.streams.
         function onStreamsChanged(): void {
             streamsDebounce.restart();
         }
+
+        target: Audio
     }
 
     Timer {
@@ -264,6 +303,33 @@ Singleton {
 
     Process {
         id: relinkProc
+
+        onRunningChanged: {
+            if (!running && root._relinkPending)
+                relinkDebounce.restart();
+        }
+    }
+
+    Timer {
+        id: relinkDebounce
+
+        interval: 50
+        onTriggered: root._runRelink()
+    }
+
+    Timer {
+        id: routeCheck
+
+        interval: 150
+        onTriggered: root.checkMusicRoute()
+    }
+
+    Timer {
+        // Native graph check only; no subprocess when the stereo route is healthy.
+        interval: 2000
+        running: root._stateLoaded && root.musicLoopback !== null
+        repeat: true
+        onTriggered: root.checkMusicRoute()
     }
 
     Process {
@@ -287,8 +353,7 @@ Singleton {
                 if (c.musicOutput)
                     root.musicOutput = c.musicOutput;
                 if (Array.isArray(c.outputStack))
-                    root.outputStack = c.outputStack;
-                root._savedMusicSinkVol = c.musicSinkVolume ?? -1;
+                    root.outputStack = AudioPolicy.names(c.outputStack);
                 root._savedNotifVol = c.notificationVolume ?? -1;
             } catch (e) {}
             root._stateLoaded = true;
