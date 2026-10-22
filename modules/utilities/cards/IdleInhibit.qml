@@ -58,7 +58,7 @@ StyledRect {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: IdleInhibitor.enabled ? qsTr("Preventing lock, screen off & sleep") : IdleInhibitor.sleepOnly ? qsTr("Locks & blanks normally, never sleeps") : qsTr("Normal power management")
+                    text: IdleInhibitor.enabled ? qsTr("Preventing lock, screen off & sleep") : IdleInhibitor.fullscreenActive ? qsTr("Fullscreen: preventing lock, screen off & sleep") : IdleInhibitor.sleepOnly ? qsTr("Locks & blanks normally, never sleeps") : qsTr("Normal power management")
                     color: Colours.palette.m3onSurfaceVariant
                     font.pointSize: Tokens.font.size.small
                     elide: Text.ElideRight
@@ -68,6 +68,24 @@ StyledRect {
             StyledSwitch {
                 checked: IdleInhibitor.enabled
                 onToggled: IdleInhibitor.enabled = checked
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Tokens.spacing.normal
+
+            StyledText {
+                Layout.fillWidth: true
+                text: qsTr("Automatic when fullscreen")
+                color: Colours.palette.m3onSurfaceVariant
+                font.pointSize: Tokens.font.size.small
+                elide: Text.ElideRight
+            }
+
+            StyledSwitch {
+                checked: GlobalConfig.general.idle.inhibitWhenFullscreen
+                onToggled: GlobalConfig.general.idle.inhibitWhenFullscreen = checked
             }
         }
 
@@ -118,7 +136,7 @@ StyledRect {
                 id: activeText
 
                 anchors.centerIn: parent
-                text: qsTr("Active since %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, GlobalConfig.services.useTwelveHourClock ? "hh:mm a" : "hh:mm"))
+                text: IdleInhibitor.fullscreenActive && !IdleInhibitor.enabled ? qsTr("Automatic · fullscreen") : qsTr("Active since %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, GlobalConfig.services.useTwelveHourClock ? "hh:mm a" : "hh:mm"))
                 color: Colours.palette.m3onPrimary
                 font.pointSize: Math.round(Tokens.font.size.small * 0.9)
             }

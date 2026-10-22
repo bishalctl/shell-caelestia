@@ -7,15 +7,16 @@ import Quickshell.Wayland
 import Caelestia.Config
 import Caelestia.Internal
 import qs.services
-// Qualified alias: unqualified `IdleInhibitor` resolves to the Quickshell.Wayland
-// type here, silently shadowing our qs.services singleton.
 import qs.services as Services
 
 Scope {
     id: root
 
     required property Lock lock
-    readonly property bool enabled: !GlobalConfig.general.idle.inhibitWhenAudio || !Players.list.some(p => p.isPlaying)
+    // Enforce Keep Awake locally too: a compositor inhibitor can take a frame
+    // to map, and some timeout entries may opt out of protocol inhibitors.
+    // Qualify the service to distinguish it from Quickshell.Wayland's type.
+    readonly property bool enabled: !Services.IdleInhibitor.inhibiting && (!GlobalConfig.general.idle.inhibitWhenAudio || !Players.list.some(p => p.isPlaying))
 
     // Sleep-type actions are the ones additionally blocked in sleep-only inhibit
     // mode; lock/dpms timeouts keep firing there.
@@ -39,12 +40,12 @@ Scope {
     }
 
     Connections {
-        target: Services.IdleInhibitor
-
         function onLockAndBlankRequested(): void {
             root.lock.lock.locked = true;
             dpmsTimer.restart();
         }
+
+        target: Services.IdleInhibitor
     }
 
     Timer {
@@ -69,11 +70,17 @@ Scope {
 
         IdleMonitor {
             required property var modelData
+            readonly property bool watching: root.enabled && (modelData.enabled ?? true) && !(Services.IdleInhibitor.sleepOnly && root.isSleepAction(modelData.idleAction))
 
-            enabled: root.enabled && (modelData.enabled ?? true) && !(Services.IdleInhibitor.sleepOnly && root.isSleepAction(modelData.idleAction))
+            enabled: watching
             timeout: modelData.timeout
             respectInhibitors: modelData.respectInhibitors ?? true
-            onIsIdleChanged: root.handleIdleAction(isIdle ? modelData.idleAction : modelData.returnAction)
+            onIsIdleChanged: {
+                // Ignore a queued timeout after inhibition starts, but always
+                // allow return actions (e.g. restoring a blanked display).
+                if (!isIdle || watching)
+                    root.handleIdleAction(isIdle ? modelData.idleAction : modelData.returnAction);
+            }
         }
     }
 }

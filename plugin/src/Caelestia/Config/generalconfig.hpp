@@ -30,6 +30,7 @@ class GeneralIdle : public ConfigObject {
 
     CONFIG_GLOBAL_PROPERTY(bool, lockBeforeSleep, true)
     CONFIG_GLOBAL_PROPERTY(bool, inhibitWhenAudio, true)
+    CONFIG_GLOBAL_PROPERTY(bool, inhibitWhenFullscreen, true)
     CONFIG_GLOBAL_PROPERTY(QVariantList, timeouts,
         {
             vmap({

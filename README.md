@@ -191,6 +191,24 @@ by default. To change it, change the wallpapers path in `~/.config/caelestia/she
 To set the wallpaper, you can use the command `caelestia wallpaper`. Use `caelestia wallpaper -h` for more info about
 the command.
 
+### Keep Awake while gaming
+
+Fullscreen windows automatically prevent idle locking, screen blanking, and idle
+sleep, including when playing with a controller or watching a cutscene. Protection
+applies to fullscreen windows on any visible monitor/workspace, including special
+workspaces and client-only fullscreen games. Normal idle timeouts resume when no
+fullscreen window is visible.
+
+The utilities drawer's **Keep Awake** card shows when fullscreen protection is
+active. Its main switch keeps the session awake manually, including for windowed
+games. **Automatic when fullscreen** controls the persistent
+`general.idle.inhibitWhenFullscreen` setting (enabled by default). **Block sleep
+only** allows idle locking and screen blanking while blocking idle suspend.
+
+For scripts, `caelestia shell idleInhibitor isInhibiting` reports whether manual
+or fullscreen protection is active; `isFullscreenActive` reports automatic
+fullscreen protection specifically.
+
 ## Updating
 
 If installed via the AUR package, simply update your system (e.g. using `yay`).
@@ -334,6 +352,7 @@ For example, to disable the bar on DP-1:
         "idle": {
             "lockBeforeSleep": true,
             "inhibitWhenAudio": true,
+            "inhibitWhenFullscreen": true,
             "timeouts": [
                 {
                     "timeout": 180,
