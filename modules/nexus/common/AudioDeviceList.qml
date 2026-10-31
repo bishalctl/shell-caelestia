@@ -7,6 +7,7 @@ import Quickshell.Services.Pipewire
 import Caelestia.Config
 import Caelestia.I18n
 import qs.components
+import qs.components.controls
 import qs.services
 import qs.modules.nexus.common
 
@@ -15,7 +16,12 @@ ItemList {
 
     property var nodes: []
     property int currentId: -1
+    // Alternative to currentId for selections keyed by node.name (music routing).
+    property string currentName
     property string iconName: "speaker"
+    // Show per-device "block from automatic switching" buttons (AudioDevices).
+    property bool blockable
+    property bool inputDevices
 
     signal selected(node: PwNode)
 
@@ -31,7 +37,7 @@ ItemList {
 
         required property PwNode modelData
         required property int index
-        readonly property bool active: device.modelData?.id === root.currentId
+        readonly property bool active: root.currentName ? device.modelData?.name === root.currentName : device.modelData?.id === root.currentId
 
         anchors.left: root.list.contentItem.left
         anchors.right: root.list.contentItem.right
@@ -79,6 +85,16 @@ ItemList {
                 text: device.modelData?.description || device.modelData?.name || Tr.trCtx("Unknown", "unknown audio device")
                 font: Tokens.font.body.small
                 elide: Text.ElideRight
+            }
+
+            Loader {
+                active: root.blockable
+                visible: active
+
+                sourceComponent: AudioDeviceBlockButton {
+                    deviceName: device.modelData?.name ?? ""
+                    inputDevice: root.inputDevices
+                }
             }
 
             MaterialIcon {
