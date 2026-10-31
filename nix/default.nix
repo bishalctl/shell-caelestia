@@ -31,6 +31,7 @@
   m3shapes,
   python3,
   dbus,
+  cliphist,
   debug ? false,
   withCli ? false,
   extraRuntimeDeps ? [],
@@ -53,6 +54,7 @@
       hyprland
       python3 # kdeglobals merge for KDE/Qt (Dolphin) theming in Colours.qml
       dbus # dbus-send: KGlobalSettings notifyChange so open KDE apps recolour live
+      cliphist # launcher clipboard mode
     ]
     ++ extraRuntimeDeps
     ++ lib.optional withCli caelestia-cli;

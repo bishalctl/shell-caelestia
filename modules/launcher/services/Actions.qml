@@ -50,8 +50,9 @@ Searcher {
                 Colours.setMode(command[1]);
             } else {
                 list.screenState.launcher = false;
+                // Own unit (via launchPrefix) so anything launched by an action outlives the shell
                 if (!SessionManager.exec(command))
-                    Quickshell.execDetached(command);
+                    Quickshell.execDetached([...GlobalConfig.launcher.launchPrefix, ...command]);
             }
         }
     }
