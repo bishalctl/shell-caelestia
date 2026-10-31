@@ -115,6 +115,13 @@ Item {
         }
 
         Popout {
+            name: "ephemera"
+            sourceComponent: EphemeraChat {
+                popouts: root.popouts
+            }
+        }
+
+        Popout {
             name: "kblayout"
             sourceComponent: KbLayout {}
         }
@@ -122,13 +129,6 @@ Item {
         Popout {
             name: "lockstatus"
             sourceComponent: LockStatus {}
-        }
-
-        Popout {
-            name: "ephemera"
-            sourceComponent: EphemeraChat {
-                popouts: root.popouts
-            }
         }
 
         Repeater {
