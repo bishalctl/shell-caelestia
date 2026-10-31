@@ -28,6 +28,12 @@ ShellRoot {
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;
+
+        // Audio routing/persistence must run at boot, not on first popout open:
+        // restores saved volumes, music_sink route and loopback gains.
+        AudioDevices;
+        VirtualSink;
+        AudioPersist;
     }
 
     FontLoader {

@@ -9,6 +9,7 @@ import Caelestia.I18n
 import qs.components
 import qs.components.controls
 import qs.services
+import qs.utils
 
 Item {
     id: root
@@ -18,12 +19,20 @@ Item {
     implicitWidth: Tokens.sizes.bar.audioWidth
     implicitHeight: layout.implicitHeight + Tokens.padding.medium * 2
 
+    // ALSA reads are ref-gated: poll the hardware only while the popout is open.
+    Component.onCompleted: Alsa.refCount++
+    Component.onDestruction: Alsa.refCount--
+
     ButtonGroup {
         id: sinks
     }
 
     ButtonGroup {
         id: sources
+    }
+
+    ButtonGroup {
+        id: musicOutputs
     }
 
     ColumnLayout {
@@ -40,18 +49,17 @@ Item {
         }
 
         Repeater {
-            model: Audio.sinks
+            // notification_sink is the alert bus fanned out to every device, not a sensible default.
+            model: Audio.sinks.filter(n => n?.name !== VirtualSink.notificationSinkName)
 
-            StyledRadioButton {
-                id: control
-
+            DeviceRow {
                 required property PwNode modelData
 
-                Layout.fillWidth: true
-                ButtonGroup.group: sinks
+                group: sinks
                 checked: Audio.sink?.id === modelData.id
+                text: modelData.description || modelData.name
+                deviceName: modelData.name
                 onClicked: Audio.setAudioSink(modelData)
-                text: modelData.description
             }
         }
 
@@ -64,42 +72,129 @@ Item {
         Repeater {
             model: Audio.sources
 
-            StyledRadioButton {
+            DeviceRow {
                 required property PwNode modelData
 
-                Layout.fillWidth: true
-                ButtonGroup.group: sources
+                group: sources
                 checked: Audio.source?.id === modelData.id
+                text: modelData.description || modelData.name
+                deviceName: modelData.name
+                inputDevice: true
                 onClicked: Audio.setAudioSource(modelData)
-                text: modelData.description
             }
         }
 
+        VolumeRow {
+            Layout.topMargin: Tokens.spacing.medium
+            label: Audio.muted ? Tr.tr("Volume (muted)") : Tr.tr("Volume (%1%)").arg(Math.round(Audio.volume * 100))
+            icon: Icons.getVolumeIcon(Audio.volume, Audio.muted)
+            muted: Audio.muted
+            value: Audio.volume
+            onMoved: v => Audio.setVolume(v)
+            onToggleMute: Audio.setMuted(!Audio.muted)
+            onStep: up => up ? Audio.incrementVolume() : Audio.decrementVolume()
+        }
+
+        VolumeRow {
+            label: Audio.sourceMuted ? Tr.tr("Microphone (muted)") : Tr.tr("Microphone (%1%)").arg(Math.round(Audio.sourceVolume * 100))
+            icon: Icons.getMicVolumeIcon(Audio.sourceVolume, Audio.sourceMuted)
+            muted: Audio.sourceMuted
+            value: Audio.sourceVolume
+            onMoved: v => Audio.setSourceVolume(v)
+            onToggleMute: Audio.setSourceMuted(!Audio.sourceMuted)
+            onStep: up => up ? Audio.incrementSourceVolume() : Audio.decrementSourceVolume()
+        }
+
+        // Music virtual sink routing: apps -> music_sink -> music_sink.output -> <physical device>.
+        // The "Music" slider is the routed device's volume; music_sink's own volume is the
+        // main slider above while music_sink is the default. Only shown when the graph has it.
         StyledText {
             Layout.topMargin: Tokens.spacing.medium
-            text: Audio.muted ? Tr.tr("Volume (muted)") : Tr.tr("Volume (%1%)").arg(Math.round(Audio.volume * 100))
+            visible: VirtualSink.available
+            text: Tr.tr("Music output device")
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
-        CustomMouseArea {
-            Layout.fillWidth: true
-            implicitHeight: Tokens.padding.medium * 3
+        Repeater {
+            model: VirtualSink.available ? VirtualSink.physicalSinks : []
 
-            onWheel: event => {
-                if (event.angleDelta.y > 0)
-                    Audio.incrementVolume();
-                else if (event.angleDelta.y < 0)
-                    Audio.decrementVolume();
+            DeviceRow {
+                required property PwNode modelData
+
+                group: musicOutputs
+                checked: VirtualSink.musicOutput === modelData.name
+                text: modelData.description || modelData.name
+                deviceName: modelData.name
+                onClicked: VirtualSink.setMusicOutput(modelData)
             }
+        }
 
-            StyledSlider {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                implicitHeight: parent.implicitHeight
+        VolumeRow {
+            visible: VirtualSink.available
+            label: VirtualSink.outputMuted ? Tr.tr("Music (muted)") : Tr.tr("Music (%1%)").arg(Math.round(VirtualSink.outputVolume * 100))
+            icon: Icons.getVolumeIcon(VirtualSink.outputVolume, VirtualSink.outputMuted)
+            muted: VirtualSink.outputMuted
+            value: VirtualSink.outputVolume
+            onMoved: v => VirtualSink.setOutputVolume(v)
+            onToggleMute: VirtualSink.setOutputMuted(!VirtualSink.outputMuted)
+            onStep: up => VirtualSink.setOutputVolume(VirtualSink.outputVolume + (up ? 1 : -1) * GlobalConfig.services.audioIncrement)
+        }
 
-                value: Audio.volume
-                onInteraction: value => Audio.setVolume(value)
-            }
+        VolumeRow {
+            visible: VirtualSink.available
+            label: VirtualSink.notificationMuted ? Tr.tr("Notifications (muted)") : Tr.tr("Notifications (%1%)").arg(Math.round(VirtualSink.notificationVolume * 100))
+            icon: VirtualSink.notificationMuted ? "notifications_off" : "notifications"
+            muted: VirtualSink.notificationMuted
+            value: VirtualSink.notificationVolume
+            onMoved: v => VirtualSink.setNotificationVolume(v)
+            onToggleMute: VirtualSink.setNotificationMuted(!VirtualSink.notificationMuted)
+            onStep: up => VirtualSink.setNotificationVolume(VirtualSink.notificationVolume + (up ? 1 : -1) * GlobalConfig.services.audioIncrement)
+        }
+
+        // ALSA hardware mixer of the internal card (amixer), 0-100.
+        StyledText {
+            Layout.topMargin: Tokens.spacing.medium
+            visible: Alsa.available
+            text: Tr.tr("Hardware mixer")
+            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
+        }
+
+        VolumeRow {
+            visible: Alsa.available
+            label: Tr.trCtx("Master (%1%)", "alsa mixer control").arg(Alsa.masterVolume)
+            icon: Icons.getVolumeIcon(Alsa.masterVolume / 100, Alsa.masterMuted)
+            muted: Alsa.masterMuted
+            value: Alsa.masterVolume / 100
+            max: 1
+            onMoved: v => Alsa.setVolume("Master", v * 100)
+            onToggleMute: Alsa.setMuted("Master", !Alsa.masterMuted)
+            onStep: up => Alsa.setVolume("Master", Alsa.masterVolume + (up ? 5 : -5))
+        }
+
+        VolumeRow {
+            visible: Alsa.available
+            label: Tr.trCtx("Speaker (%1%)", "alsa mixer control").arg(Alsa.speakerVolume)
+            icon: Icons.getVolumeIcon(Alsa.speakerVolume / 100, Alsa.speakerMuted)
+            muted: Alsa.speakerMuted
+            value: Alsa.speakerVolume / 100
+            max: 1
+            onMoved: v => Alsa.setVolume("Speaker", v * 100)
+            onToggleMute: Alsa.setMuted("Speaker", !Alsa.speakerMuted)
+            onStep: up => Alsa.setVolume("Speaker", Alsa.speakerVolume + (up ? 5 : -5))
+        }
+
+        VolumeRow {
+            visible: Alsa.available
+            // Display value falls back to the persisted volume while the jack reports 0
+            // (nothing plugged in); the icon still shows the state.
+            label: Tr.trCtx("Headphone/AUX (%1%)", "alsa mixer control").arg(Alsa.headphoneDisplayVolume)
+            icon: Alsa.headphoneMuted ? "headset_off" : "headphones"
+            muted: Alsa.headphoneMuted
+            value: Alsa.headphoneDisplayVolume / 100
+            max: 1
+            onMoved: v => Alsa.setVolume("Headphone", v * 100)
+            onToggleMute: Alsa.setMuted("Headphone", !Alsa.headphoneMuted)
+            onStep: up => Alsa.setVolume("Headphone", Alsa.headphoneDisplayVolume + (up ? 5 : -5))
         }
 
         IconTextButton {
@@ -112,6 +207,95 @@ Item {
             icon: "settings"
 
             onClicked: root.popouts.detachRequested("audio")
+        }
+    }
+
+    // A device radio with the "block from automatic switching" toggle on the right.
+    component DeviceRow: RowLayout {
+        id: deviceRow
+
+        property alias checked: radio.checked
+        property alias text: radio.text
+        required property ButtonGroup group
+        required property string deviceName
+        property bool inputDevice
+
+        signal clicked
+
+        Layout.fillWidth: true
+        spacing: Tokens.spacing.small
+
+        StyledRadioButton {
+            id: radio
+
+            Layout.fillWidth: true
+            ButtonGroup.group: deviceRow.group
+            onClicked: deviceRow.clicked()
+        }
+
+        AudioDeviceBlockButton {
+            deviceName: deviceRow.deviceName
+            inputDevice: deviceRow.inputDevice
+        }
+    }
+
+    // Label + mute button + wheel-steppable slider. Sliders are 0..maxVolume unless `max` says otherwise.
+    component VolumeRow: ColumnLayout {
+        id: volumeRow
+
+        property alias label: volumeLabel.text
+        property alias icon: muteButton.icon
+        property bool muted
+        property real value
+        property real max: GlobalConfig.services.maxVolume
+
+        signal moved(v: real)
+        signal toggleMute
+        signal step(up: bool)
+
+        Layout.fillWidth: true
+        spacing: Tokens.spacing.extraSmall
+
+        StyledText {
+            id: volumeLabel
+
+            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Tokens.spacing.small
+
+            IconButton {
+                id: muteButton
+
+                type: IconButton.Tonal
+                isToggle: true
+                checked: volumeRow.muted
+                onClicked: volumeRow.toggleMute()
+            }
+
+            CustomMouseArea {
+                Layout.fillWidth: true
+                implicitHeight: Tokens.padding.medium * 3
+
+                onWheel: event => {
+                    if (event.angleDelta.y > 0)
+                        volumeRow.step(true);
+                    else if (event.angleDelta.y < 0)
+                        volumeRow.step(false);
+                }
+
+                StyledSlider {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    implicitHeight: parent.implicitHeight
+
+                    to: volumeRow.max
+                    value: volumeRow.value
+                    onInteraction: value => volumeRow.moved(value)
+                }
+            }
         }
     }
 }
