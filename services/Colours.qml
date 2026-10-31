@@ -76,6 +76,9 @@ Singleton {
             if (colours.hasOwnProperty(propName))
                 colours[propName] = `#${colour}`;
         }
+
+        if (!isPreview)
+            root.applyExternalColours();
     }
 
     function setMode(mode: string): void {
@@ -85,7 +88,9 @@ Singleton {
     function reloadHyprRules(): void {
         let rule, trEnabled;
         if (Hypr.usingLua) {
-            rule = `eval hl.layer_rule({ match = { namespace = "caelestia-drawers" }, %1 = %2 })`;
+            // Named rules: a stable name makes re-issues replace the rule instead of
+            // appending a fresh engine rule each time transparency changes.
+            rule = `eval hl.layer_rule({ name = "caelestia-drawers-%1", match = { namespace = "caelestia-drawers" }, %1 = %2 })`;
             trEnabled = transparency.enabled;
         } else {
             rule = "keyword layerrule %1 %2, match:namespace caelestia-drawers";
@@ -103,11 +108,366 @@ Singleton {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // External theming: push the scheme to apps outside the shell. Runs from
+    // load() on every real (non-preview) scheme change; the palette pipeline
+    // above is upstream's and untouched.
+    // ---------------------------------------------------------------------
+
+    // Base of the socket kitty listens on (kitty.conf: listen_on). kitty appends -<pid>,
+    // so live apply globs "<base>-*".
+    readonly property string kittySocketBase: "/tmp/kitty-bishal"
+
+    // "rrggbb" from a QML color (channels are 0..1)
+    function toHex(c: color): string {
+        const h = v => Math.round(v * 255).toString(16).padStart(2, "0");
+        return h(c.r) + h(c.g) + h(c.b);
+    }
+
+    function applyExternalColours(): void {
+        applyHyprColours();
+        applyKittyColours();
+        applyShellColours();
+        applyPapirusFolders();
+        applyThunarExtra();
+        applyKdeColours();
+    }
+
+    // Live border colours, PLUS a colors.conf write so the compositor boots with
+    // the right borders before the shell is up (hyprland.lua parses this file at
+    // startup; hyprland.conf `source`s it under hyprlang). Under the Lua config
+    // manager `keyword` is rejected, so push via `eval hl.config` — keys turn
+    // ":"->"." and hl.config MERGES (only the listed keys change, applied live).
+    function applyHyprColours(): void {
+        const accent = toHex(current.m3primary);
+        const muted = toHex(current.m3surfaceVariant);
+        const values = {
+            "general:col.active_border": `rgba(${accent}ff)`,
+            "general:col.inactive_border": `rgba(${muted}aa)`
+        };
+        if (Hypr.usingLua) {
+            const entries = Object.entries(values).map(([k, v]) => `["${k.replace(/:/g, ".")}"] = "${v}"`);
+            Hypr.extras.batchMessage([`eval hl.config({ ${entries.join(", ")} })`]);
+        } else {
+            Hypr.extras.batchMessage(Object.entries(values).map(([k, v]) => `keyword ${k} ${v}`));
+        }
+        hyprColoursFile.setText(`# Colors for hyprland\n$hyprland_active_border_color = rgba(${accent}ff)\n$hyprland_inactive_border_color = rgba(${muted}aa)\n`);
+    }
+
+    // Persist kitty colours (for new windows) + live-apply to running ones
+    function applyKittyColours(): void {
+        const map = {
+            background: `#${toHex(current.m3surface)}`,
+            foreground: `#${toHex(current.m3onSurface)}`,
+            cursor: `#${toHex(current.m3primary)}`,
+            cursor_text_color: `#${toHex(current.m3surface)}`,
+            selection_background: `#${toHex(current.m3primary)}`,
+            selection_foreground: `#${toHex(current.m3onPrimary)}`,
+            url_color: `#${toHex(current.m3primary)}`
+        };
+        for (let i = 0; i < 16; i++)
+            map[`color${i}`] = `#${toHex(current[`term${i}`])}`;
+
+        // Dedicated prompt-accent slots — shell-colors.sh references these as \e[38;5;16m / 17m.
+        // Palette-indexed (not absolute RGB) so kitty re-renders the already-drawn bash prompt in
+        // place when the scheme changes — no Ctrl-C / fresh prompt needed.
+        const promptAccent = current.m3primary;
+        const promptDim = Qt.rgba(promptAccent.r * 0.82, promptAccent.g * 0.82, promptAccent.b * 0.82, 1);
+        map["color16"] = `#${toHex(promptDim)}`;
+        map["color17"] = `#${toHex(promptAccent)}`;
+
+        // Persisted file, included by kitty.conf, so new terminals pick it up
+        const lines = ["# Colours managed by caelestia (Colours.qml)"];
+        for (const [k, v] of Object.entries(map))
+            lines.push(`${k} ${v}`);
+        kittyColours.setText(lines.join("\n") + "\n");
+
+        // Live-apply to every running kitty. Sockets are <base>-<pid>, so glob them; inline
+        // values (not the file) avoid a read-after-write race with setText above.
+        const kv = Object.entries(map).map(([k, v]) => `${k}=${v}`).join(" ");
+        Quickshell.execDetached(["sh", "-c", `for s in ${root.kittySocketBase}-*; do kitty @ --to "unix:$s" set-colors --all ${kv} 2>/dev/null; done`]);
+    }
+
+    // PS1 colours for bash, written to $XDG_STATE_HOME/caelestia/shell-colors.sh. We ONLY write
+    // the file the user's PROMPT_COMMAND re-sources each prompt (__cl_ps1_reload). No
+    // `kitty @ send-text` push — that types into whatever is in the foreground (Claude Code,
+    // vim, ...) and corrupts it. Long-lived shells recolour on next prompt.
+    function applyShellColours(): void {
+        // Prompt colours are PALETTE-INDEXED: kitty term colour 16 = dim accent, 17 = accent (set in
+        // applyKittyColours). Because PS1 references those palette slots rather than absolute RGB,
+        // kitty re-renders the already-drawn prompt IN PLACE the instant the scheme changes. This
+        // file just maps the CL_* vars PS1 uses onto the slots; its contents are static (only the
+        // palette behind 16/17 changes).
+        const accent = current.m3primary;
+        const lines = [
+            "# Generated by caelestia (Colours.qml) — PS1 colours via kitty palette slots 16/17",
+            `# accent = #${toHex(accent)}  (CL_FG_SECONDARY = colour17 = accent, CL_FG_PRIMARY = colour16 = darker)`,
+            "# Bash-bracketed (non-printing markers)",
+            `export CL_FG_PRIMARY_BASH="\\[\\e[38;5;16m\\]"`,
+            `export CL_FG_SECONDARY_BASH="\\[\\e[38;5;17m\\]"`,
+            `export CL_BG_PRIMARY_BASH="\\[\\e[48;5;16m\\]"`,
+            `export CL_BG_SECONDARY_BASH="\\[\\e[48;5;17m\\]"`,
+            `export CL_RESET_BASH="\\[\\e[0m\\]"`,
+            "# Raw ANSI (no markers)",
+            `export CL_FG_PRIMARY_RAW=$'\\e[38;5;16m'`,
+            `export CL_FG_SECONDARY_RAW=$'\\e[38;5;17m'`,
+            `export CL_BG_PRIMARY_RAW=$'\\e[48;5;16m'`,
+            `export CL_BG_SECONDARY_RAW=$'\\e[48;5;17m'`,
+            `export CL_RESET_RAW=$'\\e[0m'`,
+            "# Select appropriate set",
+            `if [ -n "$BASH_VERSION" ]; then`,
+            `  export CL_FG_PRIMARY="$CL_FG_PRIMARY_BASH"`,
+            `  export CL_FG_SECONDARY="$CL_FG_SECONDARY_BASH"`,
+            `  export CL_BG_PRIMARY="$CL_BG_PRIMARY_BASH"`,
+            `  export CL_BG_SECONDARY="$CL_BG_SECONDARY_BASH"`,
+            `  export CL_RESET="$CL_RESET_BASH"`,
+            "else",
+            `  export CL_FG_PRIMARY=$CL_FG_PRIMARY_RAW`,
+            `  export CL_FG_SECONDARY=$CL_FG_SECONDARY_RAW`,
+            `  export CL_BG_PRIMARY=$CL_BG_PRIMARY_RAW`,
+            `  export CL_BG_SECONDARY=$CL_BG_SECONDARY_RAW`,
+            `  export CL_RESET=$CL_RESET_RAW`,
+            "fi"
+        ];
+        shellColours.setText(lines.join("\n") + "\n");
+    }
+
+    // Recolour Papirus folder icons to the accent. caelestia's CLI does this too, but via
+    // `sudo papirus-folders` — which runs as root, so it can't reach the user's writable theme copy
+    // and only targets the read-only nix store. We run it as the USER (no sudo) so papirus-folders
+    // resolves to the writable copy at ~/.local/share/icons/Papirus-Dark (placed by home-manager's
+    // home.activation.papirusWritable). The colour NAME is derived from the accent hue, mirroring
+    // caelestia's own hue→Papirus-colour mapping (utils/theme.py).
+    //
+    // New GTK windows pick the recolour up on launch. We intentionally do NOT bounce the GSettings
+    // icon theme to force already-open apps to repaint: that toggle (icon-theme → Adwaita → back)
+    // raced across rapid theme switches and could leave the icon theme stuck on Adwaita. The
+    // recolour-on-disk is enough.
+    function applyPapirusFolders(): void {
+        const c = root.papirusFolderColour();
+        Quickshell.execDetached(["sh", "-c", `papirus-folders -C ${c} -t Papirus-Dark`]);
+    }
+
+    function papirusFolderColour(): string {
+        const c = current.m3primary;
+        const r = Math.round(c.r * 255);
+        const g = Math.round(c.g * 255);
+        const b = Math.round(c.b * 255);
+        const maxV = Math.max(r, g, b);
+        const minV = Math.min(r, g, b);
+        const brightness = maxV;
+        const saturation = maxV === 0 ? 0 : Math.floor((maxV - minV) * 100 / maxV);
+
+        // Low saturation → greyscale folders
+        if (saturation < 20)
+            return brightness < 85 ? "black" : brightness < 170 ? "grey" : "white";
+
+        // Medium-low saturation + bright → pale variants (matches caelestia's use_pale)
+        const pale = saturation < 60 && brightness > 180;
+
+        // Blue dominant
+        if (b > r && b > g) {
+            const rRatio = b > 0 ? Math.floor(r * 100 / b) : 0;
+            const gRatio = b > 0 ? Math.floor(g * 100 / b) : 0;
+            if (rRatio > 70 && gRatio > 70)
+                return Math.abs(r - g) < 15 ? "blue" : r > g ? "violet" : "cyan";
+            if (rRatio > 60 && r > g)
+                return "violet";
+            if (gRatio > 60 && g > r)
+                return "cyan";
+            return "blue";
+        }
+
+        // Red dominant
+        if (r > g && r > b) {
+            if (g > b + 30) {
+                const rgRatio = r > 0 ? Math.floor(g * 100 / r) : 0;
+                if (pale)
+                    return rgRatio > 70 && brightness < 220 ? "palebrown" : "paleorange";
+                return rgRatio > 70 && brightness < 180 ? "brown" : "orange";
+            }
+            if (b > g + 20)
+                return "pink";
+            return pale ? "pink" : "red";
+        }
+
+        // Green dominant
+        if (g > r && g > b)
+            return r > b + 30 ? "yellow" : "green";
+
+        return "grey";
+    }
+
+    // Toolbar + menubar rules missing from the CLI's thunar.css template (Thunar looks unstyled there
+    // without them). The CLI fully rewrites ~/.config/gtk-3.0/thunar.css on every `caelestia scheme
+    // set`, so we re-append a MARKED block carrying the live palette after each change. applyExternal-
+    // Colours() runs from load(), which only fires once the CLI has written the scheme file (and thus
+    // thunar.css), so we append after — never before. The sed strips any prior block first, so it's
+    // idempotent across re-runs. Colours map the same way the template does: $primary→m3primary,
+    // $surface→m3surface. Thunar is GTK3, so only gtk-3.0 matters; thunar.css is @imported by
+    // gtk-3.0/gtk.css. CSS only applies at Thunar launch (GTK3 on Wayland won't hot-reload user CSS),
+    // which is why a brief CLI-wrote-but-not-yet-appended window is harmless — the block is present
+    // by the time a new window opens.
+    function applyThunarExtra(): void {
+        const primary = `#${toHex(current.m3primary)}`;
+        const surface = `#${toHex(current.m3surface)}`;
+        const block = [
+            "/* caelestia-shell:thunar-extra BEGIN (managed by Colours.qml — toolbar/menubar) */",
+            `.thunar toolbar { background-color: alpha(${primary}, 0.08); }`,
+            `.thunar toolbar toolbutton button:hover { background: alpha(${primary}, 0.15); border-radius: 100%; }`,
+            `.thunar toolbar toolitem button, .thunar toolbar toolitem entry { background: ${surface}; }`,
+            `.thunar menubar { background: ${surface}; }`,
+            `.thunar menubar menuitem menu { background: ${surface}; }`,
+            `.thunar menubar menuitem menu menuitem:hover { background: alpha(${primary}, 0.15); }`,
+            "/* caelestia-shell:thunar-extra END */"
+        ].join("\n");
+        // Quoted heredoc (<<'EOF') → no shell expansion; the block is fully substituted in QML and
+        // contains no $ / quotes, so it's emitted verbatim. Guard on the file existing so we never
+        // create an orphan thunar.css before the CLI has run.
+        Quickshell.execDetached(["sh", "-c", `f="$HOME/.config/gtk-3.0/thunar.css"; [ -f "$f" ] || exit 0; sed -i '/caelestia-shell:thunar-extra BEGIN/,/caelestia-shell:thunar-extra END/d' "$f" 2>/dev/null; cat >> "$f" <<'CAELEOF'\n${block}\nCAELEOF\n`]);
+    }
+
+    // Theme KDE/Qt apps (Dolphin, Ark, Gwenview, Kate, …) the way KColorScheme actually reads
+    // colours: the [Colors:*]/[WM]/[ColorEffects:*] groups in ~/.config/kdeglobals. We MERGE into
+    // kdeglobals (a small python pass preserves the user's other keys — icons, fonts, shortcuts),
+    // also drop a self-owned ~/.local/share/color-schemes/Caelestia.colors so the scheme shows in
+    // any KDE picker, then emit the legacy KGlobalSettings "notifyChange" DBus signal so ALREADY-
+    // OPEN KDE apps recolour live — no app restart, no plasmashell, no plasma-apply-colorscheme
+    // (unreliable off Plasma). Same end result as end-4's kde-material-you-colors, but self-contained.
+    function applyKdeColours(): void {
+        const c = current;
+        const rgb = col => `${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)}`;
+        const common = {
+            ForegroundNormal: rgb(c.m3onSurface),
+            ForegroundInactive: rgb(c.m3onSurfaceVariant),
+            ForegroundActive: rgb(c.m3primary),
+            ForegroundNegative: rgb(c.m3error),
+            ForegroundNeutral: rgb(c.m3tertiary),
+            ForegroundPositive: rgb(c.m3success),
+            DecorationFocus: rgb(c.m3primary),
+            DecorationHover: rgb(c.m3primary)
+        };
+        const container = {
+            BackgroundNormal: rgb(c.m3surfaceContainer),
+            BackgroundAlternate: rgb(c.m3surfaceContainerHigh)
+        };
+
+        const groups = {
+            "General": {
+                Name: "Caelestia",
+                ColorScheme: "Caelestia"
+            },
+            "Colors:View": Object.assign({
+                BackgroundNormal: rgb(c.m3surface),
+                BackgroundAlternate: rgb(c.m3surfaceContainerLow),
+                ForegroundLink: rgb(c.m3primary),
+                ForegroundVisited: rgb(c.m3secondary)
+            }, common),
+            "Colors:Window": Object.assign({
+                BackgroundNormal: rgb(c.m3surface),
+                BackgroundAlternate: rgb(c.m3surfaceContainer),
+                ForegroundLink: rgb(c.m3primary)
+            }, common),
+            "Colors:Button": Object.assign({}, container, common),
+            "Colors:Selection": Object.assign({}, common, {
+                BackgroundNormal: rgb(c.m3primary),
+                BackgroundAlternate: rgb(c.m3primaryContainer),
+                ForegroundNormal: rgb(c.m3onPrimary),
+                ForegroundInactive: rgb(c.m3onPrimary),
+                ForegroundActive: rgb(c.m3onPrimary),
+                ForegroundLink: rgb(c.m3onPrimary)
+            }),
+            "Colors:Tooltip": Object.assign({}, container, common),
+            "Colors:Complementary": Object.assign({}, container, common),
+            "Colors:Header": Object.assign({}, container, common),
+            "WM": {
+                activeBackground: rgb(c.m3surfaceContainer),
+                activeForeground: rgb(c.m3onSurface),
+                inactiveBackground: rgb(c.m3surface),
+                inactiveForeground: rgb(c.m3onSurfaceVariant)
+            },
+            "ColorEffects:Inactive": {
+                Enable: "true",
+                ChangeSelectionColor: "true",
+                Color: rgb(c.m3surface),
+                ColorAmount: "0.025",
+                ColorEffect: "2",
+                ContrastAmount: "0.1",
+                ContrastEffect: "2",
+                IntensityAmount: "0",
+                IntensityEffect: "0"
+            },
+            "ColorEffects:Disabled": {
+                Enable: "true",
+                Color: rgb(c.m3surfaceContainer),
+                ColorAmount: "0",
+                ColorEffect: "0",
+                ContrastAmount: "0.65",
+                ContrastEffect: "1",
+                IntensityAmount: "0.1",
+                IntensityEffect: "0"
+            }
+        };
+
+        // payload is plain JSON (no single quotes in any key/value), so it's safe inside the shell
+        // single-quoted env var. The python body is a quoted heredoc (no shell/QML expansion).
+        const payload = JSON.stringify(groups);
+        Quickshell.execDetached(["sh", "-c", `CAEL_KDE_JSON='${payload}' python3 - <<'PY'
+import os, json, configparser
+from pathlib import Path
+
+data = json.loads(os.environ["CAEL_KDE_JSON"])
+home = Path.home()
+
+# Self-owned standalone scheme file (safe to fully overwrite)
+def render(groups):
+    lines = []
+    for g, kv in groups.items():
+        lines.append("[" + g + "]")
+        for k, v in kv.items():
+            lines.append(k + "=" + str(v))
+        lines.append("")
+    return "\\n".join(lines)
+
+cs = home / ".local/share/color-schemes"
+cs.mkdir(parents=True, exist_ok=True)
+(cs / "Caelestia.colors").write_text(render(data))
+
+# Merge colour groups into kdeglobals WITHOUT touching the user's other keys
+kg = home / ".config/kdeglobals"
+cfg = configparser.ConfigParser(strict=False, interpolation=None)
+cfg.optionxform = str
+ok = True
+if kg.exists():
+    try:
+        cfg.read(kg, encoding="utf-8")
+    except Exception:
+        ok = False  # unparseable — don't risk clobbering it
+if ok:
+    for g, kv in data.items():
+        if not cfg.has_section(g):
+            cfg.add_section(g)
+        for k, v in kv.items():
+            cfg.set(g, k, str(v))
+    kg.parent.mkdir(parents=True, exist_ok=True)
+    with open(kg, "w", encoding="utf-8") as f:
+        cfg.write(f, space_around_delimiters=False)
+PY
+dbus-send --session --type=signal /KGlobalSettings org.kde.KGlobalSettings.notifyChange int32:0 int32:0 2>/dev/null || true`]);
+    }
+
     Component.onCompleted: root.requestReloadHyprRules()
 
     Connections {
         function onConfigReloaded(): void {
             root.reloadHyprRules();
+            root.applyHyprColours();
+        }
+
+        // Hyprland.usingLua may resolve after the first scheme load; a `keyword`
+        // push made before that is rejected by the Lua config manager, so re-push.
+        function onUsingLuaChanged(): void {
+            root.applyHyprColours();
         }
 
         target: Hypr
@@ -118,6 +478,31 @@ Singleton {
         watchChanges: true
         onFileChanged: reload()
         onLoaded: root.load(text(), false)
+    }
+
+    // Write-only: boot-time border colours (parsed by hyprland.lua at startup,
+    // `source`d by hyprland.conf under hyprlang)
+    FileView {
+        id: hyprColoursFile
+
+        printErrors: false
+        path: `${Paths.home}/.config/hypr/colors.conf`
+    }
+
+    // Write-only: caelestia-managed kitty palette, included by kitty.conf
+    FileView {
+        id: kittyColours
+
+        printErrors: false
+        path: `${Paths.home}/.config/kitty/colors-generated.conf`
+    }
+
+    // Write-only: PS1 colour vars, re-sourced each prompt by ~/.bashrc (__cl_ps1_reload)
+    FileView {
+        id: shellColours
+
+        printErrors: false
+        path: `${Paths.state}/shell-colors.sh`
     }
 
     ImageAnalyser {
