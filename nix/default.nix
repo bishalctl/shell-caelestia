@@ -29,6 +29,7 @@
   pkg-config,
   caelestia-cli,
   m3shapes,
+  cliphist,
   debug ? false,
   withCli ? false,
   extraRuntimeDeps ? [],
@@ -49,6 +50,7 @@
       libqalculate
       bash
       hyprland
+      cliphist # launcher clipboard mode
     ]
     ++ extraRuntimeDeps
     ++ lib.optional withCli caelestia-cli;

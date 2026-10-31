@@ -135,7 +135,16 @@ class LauncherConfig : public settings::ObjectNode {
                 { u"description"_s, mark(u"Configure the shell"_s) },
                 { u"command"_s, QStringList{ u"caelestia"_s, u"shell"_s, u"nexus"_s, u"open"_s } },
             }),
+            vmap({
+                { u"name"_s, markCtx(u"Browser"_s, u"launcher action"_s) },
+                { u"icon"_s, u"public"_s },
+                { u"description"_s, mark(u"Open a browser or browser profile"_s) },
+                { u"command"_s, QStringList{ u"autocomplete"_s, u"browser"_s } },
+            }),
         }))
+    // Prepended to every launched command (apps, actions, browsers), e.g. ["app2unit", "--"]
+    // so launched apps get their own transient unit and outlive the shell's cgroup.
+    CONFIG_GLOBAL_PROPERTY(QStringList, launchPrefix, {})
 };
 
 } // namespace caelestia::shell::config

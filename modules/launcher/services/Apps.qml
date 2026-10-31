@@ -11,9 +11,17 @@ Searcher {
     function launch(entry: DesktopEntry): void {
         appDb.incrementFrequency(entry.id);
 
+        // launchPrefix (e.g. ["app2unit", "--"]) moves the app into its own transient
+        // unit so it survives the shell's cgroup being killed on restart/exit.
+        const prefix = GlobalConfig.launcher.launchPrefix;
         if (entry.runInTerminal)
             Quickshell.execDetached({
-                command: [...GlobalConfig.general.apps.terminal, `${Quickshell.shellDir}/assets/wrap_term_launch.sh`, ...entry.command],
+                command: [...prefix, ...GlobalConfig.general.apps.terminal, `${Quickshell.shellDir}/assets/wrap_term_launch.sh`, ...entry.command],
+                workingDirectory: entry.workingDirectory
+            });
+        else if (prefix.length > 0)
+            Quickshell.execDetached({
+                command: [...prefix, ...entry.command],
                 workingDirectory: entry.workingDirectory
             });
         else
