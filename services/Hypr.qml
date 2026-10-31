@@ -55,10 +55,6 @@ Singleton {
         return "dispatch " + (usingLua ? luaDispatch(request) : request);
     }
 
-    function focusWindow(address: string): void {
-        dispatch(`focuswindow address:${address.startsWith("0x") ? address : "0x" + address}`);
-    }
-
     // Classic dispatcher string -> hl.dsp.* Lua expression. Unknown verbs pass through
     // with a warning (call sites should then use the usingLua ternary idiom instead).
     function luaDispatch(request: string): string {
@@ -134,7 +130,8 @@ Singleton {
 
     // address: bare hex, no 0x prefix (HyprlandToplevel.address)
     function focusWindow(address: string): void {
-        dispatch(usingLua ? `hl.dsp.focus({ window = "address:0x${address}" })` : `focuswindow address:0x${address}`);
+        const addr = address.startsWith("0x") ? address : "0x" + address;
+        dispatch(usingLua ? `hl.dsp.focus({ window = "address:${addr}" })` : `focuswindow address:${addr}`);
     }
 
     function submap(name: string): void {
