@@ -26,6 +26,7 @@ class RStateRoot : public settings::RootNode {
     STATE_GLOBAL_PROPERTY(bool, gameMode, false)
     STATE_GLOBAL_PROPERTY(bool, inhibitIdle, false)
     STATE_GLOBAL_PROPERTY(qreal, inhibitingIdleSince, -1)
+    STATE_GLOBAL_PROPERTY(bool, inhibitSleepOnly, false)
 
 public:
     explicit RStateRoot(const QString& path, RStateRoot* fallback = nullptr, QObject* parent = nullptr);
