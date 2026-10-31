@@ -3,12 +3,24 @@
 #include <qfile.h>
 #include <qregularexpression.h>
 
+#include "config/dashboardconfig.hpp"
+#include "config/rootnodes.hpp"
+
 namespace caelestia::shell::services {
 
 using Qt::StringLiterals::operator""_s;
 
 Memory::Memory(QObject* parent)
-    : TickingService(parent) {}
+    : TickingService(parent) {
+    const auto* perf = config::ConfigSingleton::instance()->dashboard()->performance();
+    m_history = new UsageHistory(this, [perf] { return perf->memGraphInterval(); });
+    QObject::connect(
+        perf, &config::DashboardPerformance::memGraphIntervalChanged, m_history, &UsageHistory::refreshInterval);
+}
+
+UsageHistory* Memory::history() const {
+    return m_history;
+}
 
 qreal Memory::used() const {
     return m_used;
@@ -46,6 +58,7 @@ void Memory::tick() {
         return;
     }
     const quint64 usedKib = totalKib > availKib ? totalKib - availKib : 0;
+    m_history->record(static_cast<qreal>(usedKib) / static_cast<qreal>(totalKib));
 
     if (totalKib == m_lastTotal && usedKib == m_lastUsed) {
         return;

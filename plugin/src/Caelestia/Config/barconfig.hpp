@@ -124,15 +124,22 @@ class BarConfig : public settings::ObjectNode {
             LIST_ENTRY(network, true),
             LIST_ENTRY(bluetooth, true),
             LIST_ENTRY(battery, true),
+            // Personal fork: NM VPN indicator (collapsed while no VPN is up) and the system tray
+            // as a status-pill icon that opens the "systray" grid popout (popouts/SysTray.qml)
+            LIST_ENTRY(vpn, true),
+            LIST_ENTRY(systray, true),
         }))
     CONFIG_LIST(EntryList, entries,
         DEFAULT_ARG({
             LIST_ENTRY(logo, true),
-            LIST_ENTRY(workspaces, true),
+            // Personal fork: compact fixed-size workspace switcher instead of the expanding one,
+            // and the inline tray disabled (it lives in the statusIcons pill as "systray")
+            LIST_ENTRY(workspaces, false),
+            LIST_ENTRY(workspaceArrows, true),
             LIST_ENTRY(spacer, true),
             LIST_ENTRY(activeWindow, true),
             LIST_ENTRY(spacer, true),
-            LIST_ENTRY(tray, true),
+            LIST_ENTRY(tray, false),
             LIST_ENTRY(clock, true),
             LIST_ENTRY(statusIcons, true),
             LIST_ENTRY(power, true),

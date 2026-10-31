@@ -5,6 +5,8 @@
 
 #include <cmath>
 
+#include "config/dashboardconfig.hpp"
+#include "config/rootnodes.hpp"
 #include "sensorslib.hpp"
 
 namespace caelestia::shell::services {
@@ -13,6 +15,11 @@ using Qt::StringLiterals::operator""_s;
 
 Cpu::Cpu(QObject* parent)
     : TickingService(parent) {
+    const auto* perf = config::ConfigSingleton::instance()->dashboard()->performance();
+    m_history = new UsageHistory(this, [perf] { return perf->cpuGraphInterval(); });
+    QObject::connect(
+        perf, &config::DashboardPerformance::cpuGraphIntervalChanged, m_history, &UsageHistory::refreshInterval);
+
     readNameOnce();
 }
 
@@ -28,12 +35,17 @@ qreal Cpu::temperature() const {
     return m_temperature;
 }
 
+UsageHistory* Cpu::history() const {
+    return m_history;
+}
+
 void Cpu::tick() {
     if (!m_nameLoaded) {
         readNameOnce();
     }
     refreshPercentage();
     refreshTemperature();
+    m_history->record(m_percentage);
 }
 
 void Cpu::readNameOnce() {

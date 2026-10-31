@@ -78,6 +78,7 @@ Item {
                         usage: Cpu.percentage
                         temperature: Cpu.temperature
                         accent: Colours.palette.m3primary
+                        history: Cpu.history
 
                         ServiceRef {
                             service: Cpu
@@ -97,6 +98,7 @@ Item {
                         usage: Gpu.percentage
                         temperature: Gpu.temperature
                         accent: Colours.palette.m3secondary
+                        history: Gpu.history
 
                         ServiceRef {
                             service: Gpu

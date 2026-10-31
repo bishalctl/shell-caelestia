@@ -23,6 +23,35 @@ ColumnLayout {
     spacing: Tokens.spacing.small
     width: Tokens.sizes.bar.networkWidth
 
+    // NetworkManager VPN / WireGuard profiles (shown in both views whenever any exist)
+    StyledText {
+        visible: Nmcli.vpnConnections.length > 0
+        Layout.preferredHeight: visible ? implicitHeight : 0
+        Layout.topMargin: visible ? Tokens.padding.medium : 0
+        Layout.rightMargin: Tokens.padding.extraSmall
+        text: Tr.tr("VPN")
+        font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
+    }
+
+    Repeater {
+        model: ScriptModel {
+            values: Nmcli.vpnConnections
+        }
+
+        Toggle {
+            required property var modelData
+
+            label: modelData.name
+            checked: modelData.active
+            toggle.onToggled: {
+                if (checked)
+                    Nmcli.connectVpn(modelData.uuid, null);
+                else
+                    Nmcli.disconnectVpn(modelData.uuid, null);
+            }
+        }
+    }
+
     // Wireless section
     StyledText {
         visible: root.view === "wireless"

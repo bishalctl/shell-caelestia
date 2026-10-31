@@ -3,6 +3,7 @@
 #include <qqmlintegration.h>
 
 #include "tickingservice.hpp"
+#include "usagehistory.hpp"
 
 namespace caelestia::shell::services {
 
@@ -14,6 +15,7 @@ class Cpu : public TickingService {
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
     Q_PROPERTY(qreal percentage READ percentage NOTIFY percentageChanged)
     Q_PROPERTY(qreal temperature READ temperature NOTIFY temperatureChanged)
+    Q_PROPERTY(caelestia::shell::services::UsageHistory* history READ history CONSTANT)
 
 public:
     explicit Cpu(QObject* parent = nullptr);
@@ -21,6 +23,7 @@ public:
     [[nodiscard]] QString name() const;
     [[nodiscard]] qreal percentage() const;
     [[nodiscard]] qreal temperature() const;
+    [[nodiscard]] UsageHistory* history() const;
 
 signals:
     void nameChanged();
@@ -36,6 +39,8 @@ private:
     void refreshTemperature();
 
     [[nodiscard]] static QString cleanName(QString s);
+
+    UsageHistory* m_history;
 
     QString m_name;
     qreal m_percentage = 0.0;

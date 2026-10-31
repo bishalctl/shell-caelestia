@@ -14,6 +14,15 @@ class DashboardPerformance : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, showMemory, true)
     CONFIG_PROPERTY(bool, showStorage, true)
     CONFIG_PROPERTY(bool, showNetwork, true)
+
+    // Keep the CPU/GPU/memory services ticking while the dashboard is closed so the usage
+    // graphs already have history when it opens (daemons/PerfHistory.qml)
+    CONFIG_GLOBAL_PROPERTY(bool, continuousHistory, true)
+    // Per-graph point interval (ms). 0 = resourceUpdateInterval. Samples taken every
+    // resourceUpdateInterval are averaged over this window into a single graph point.
+    CONFIG_GLOBAL_PROPERTY(int, cpuGraphInterval, 0)
+    CONFIG_GLOBAL_PROPERTY(int, gpuGraphInterval, 0)
+    CONFIG_GLOBAL_PROPERTY(int, memGraphInterval, 0)
 };
 
 class DashboardConfig : public settings::ObjectNode {
@@ -27,7 +36,7 @@ class DashboardConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, showWeather, true)
     CONFIG_PROPERTY(bool, showClockSeconds, false)
     CONFIG_GLOBAL_PROPERTY(int, mediaUpdateInterval, 500)
-    CONFIG_GLOBAL_PROPERTY(int, resourceUpdateInterval, 1000)
+    CONFIG_GLOBAL_PROPERTY(int, resourceUpdateInterval, 2000)
     CONFIG_PROPERTY(int, dragThreshold, 50)
     CONFIG_SUBOBJECT(DashboardPerformance, performance)
 };

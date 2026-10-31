@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.SystemTray
 import Caelestia.Config
 import qs.components
 import qs.services
@@ -33,10 +34,17 @@ StyledRect {
         return -1;
     }
 
+    // Tray items shown in the systray popout (same filter as the inline tray)
+    readonly property int trayCount: SystemTray.items.values.filter(i => i.status !== Status.Passive && !GlobalConfig.bar.tray.hiddenIcons.includes(i.id)).length
+
     // Entries that can shrink to nothing, spacing included
     function collapsed(entry: var): bool {
         if (entry.id === "lockStatus")
             return !Hypr.capsLock && !Hypr.numLock;
+        if (entry.id === "vpn")
+            return !Nmcli.activeVpn && !VPN.connected;
+        if (entry.id === "systray")
+            return !Config.bar.popouts.tray || trayCount === 0;
         return false;
     }
 
@@ -139,6 +147,83 @@ StyledRect {
                     delegate: EntryWrapper {
                         BatteryStatus {
                             colour: root.colour
+                        }
+                    }
+                }
+                DelegateChoice {
+                    roleValue: "vpn"
+                    delegate: EntryWrapper {
+                        id: vpnEntry
+
+                        name: "network" // Opens the network popout, where the VPN toggles live
+
+                        Item {
+                            implicitWidth: vpnIcon.implicitWidth
+                            implicitHeight: vpnEntry.present ? vpnIcon.implicitHeight : 0
+
+                            Behavior on implicitHeight {
+                                Anim {
+                                    type: Anim.SlowEffects
+                                }
+                            }
+
+                            MaterialIcon {
+                                id: vpnIcon
+
+                                anchors.centerIn: parent
+                                text: "vpn_lock"
+                                color: root.colour
+                                scale: vpnEntry.present ? 1 : 0.5
+                                opacity: vpnEntry.present ? 1 : 0
+
+                                Behavior on scale {
+                                    Anim {}
+                                }
+
+                                Behavior on opacity {
+                                    Anim {
+                                        type: Anim.DefaultEffects
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                DelegateChoice {
+                    roleValue: "systray"
+                    delegate: EntryWrapper {
+                        id: systrayEntry
+
+                        // System tray as a single icon; the items live in the "systray" grid popout
+                        Item {
+                            implicitWidth: systrayIcon.implicitWidth
+                            implicitHeight: systrayEntry.present ? systrayIcon.implicitHeight : 0
+
+                            Behavior on implicitHeight {
+                                Anim {
+                                    type: Anim.SlowEffects
+                                }
+                            }
+
+                            MaterialIcon {
+                                id: systrayIcon
+
+                                anchors.centerIn: parent
+                                text: "widgets"
+                                color: root.colour
+                                scale: systrayEntry.present ? 1 : 0.5
+                                opacity: systrayEntry.present ? 1 : 0
+
+                                Behavior on scale {
+                                    Anim {}
+                                }
+
+                                Behavior on opacity {
+                                    Anim {
+                                        type: Anim.DefaultEffects
+                                    }
+                                }
+                            }
                         }
                     }
                 }

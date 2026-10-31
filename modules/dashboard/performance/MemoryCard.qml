@@ -23,6 +23,13 @@ StyledRect {
         service: Memory
     }
 
+    UsageGraph {
+        anchors.fill: parent
+        anchors.margins: Tokens.rounding.medium
+        history: Memory.history
+        colour: root.accent
+    }
+
     ColumnLayout {
         id: layout
 
