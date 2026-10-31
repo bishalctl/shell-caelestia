@@ -48,7 +48,11 @@ StyledWindow {
         if (focusGrab.active || panels.popouts.isDetached)
             return 0;
 
-        if (monitor?.lastIpcObject.specialWorkspace?.name || monitor?.activeWorkspace?.toplevels.values.length > 0)
+        // Padding > 0 makes this window's input mask eat an edge band of the screen, so only
+        // enable it when the workspace is definitely empty - with unknown monitor/workspace
+        // state (mid-hotplug) pointer input must pass through.
+        const ws = monitor?.activeWorkspace;
+        if (!ws || monitor.lastIpcObject.specialWorkspace?.name || ws.toplevels.values.length > 0)
             return 0;
 
         const thresholds = [];
@@ -67,7 +71,9 @@ StyledWindow {
 
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
+    // Fullscreen clients render above the Top layer. Lift to Overlay when showOverFullscreen is
+    // set, or while the volume/brightness OSD is on screen so it stays visible over fullscreen windows.
+    WlrLayershell.layer: (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || panels.osd.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: screenState.launcher || screenState.session ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
