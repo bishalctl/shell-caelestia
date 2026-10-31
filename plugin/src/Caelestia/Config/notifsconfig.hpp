@@ -18,6 +18,10 @@ class NotifsConfig : public settings::ObjectNode {
     CONFIG_GLOBAL_PROPERTY(bool, actionOnClick, false)
     CONFIG_PROPERTY(int, groupPreviewNum, 3)
     CONFIG_PROPERTY(bool, openExpanded, false)
+    // Sound played on new notifications. Empty soundPath = bundled assets/sounds/notification.wav;
+    // soundTarget is an optional PipeWire node name (e.g. a dedicated notification sink) for pw-play --target.
+    CONFIG_GLOBAL_PROPERTY(QString, soundPath, {})
+    CONFIG_GLOBAL_PROPERTY(QString, soundTarget, {})
 };
 
 } // namespace caelestia::shell::config
