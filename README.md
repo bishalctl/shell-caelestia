@@ -254,7 +254,7 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
 > - `nexus`: `networkRescanInterval`
 > - `notifs`: `actionOnClick`, `defaultExpireTimeout`, `expire`, `fullscreen`, `fullscreenExpireTimeout`
 > - `paths`: `lyricsDir`, `wallpaperDir`
-> - `services`: `audioIncrement`, `brightnessIncrement`, `clockFormat`, `dataUnits`, `defaultPlayer`, `gpuType`, `lyricsBackend`, `maxVolume`, `playerAliases`, `sensorUnits`, `smartScheme`, `visualiserBars`, `weatherLocation`, `weatherUnits`
+> - `services`: `audioIncrement`, `backlightDevice`, `brightnessIncrement`, `brightnessRules`, `clockFormat`, `dataUnits`, `ddcEnabled`, `ddcMinWriteIntervalMs`, `defaultPlayer`, `gpuType`, `hdrMaxNits`, `hdrMinNits`, `hotplugDebounceMs`, `lyricsBackend`, `maxVolume`, `playerAliases`, `sensorUnits`, `smartScheme`, `visualiserBars`, `weatherLocation`, `weatherUnits`
 > - `utilities`: `toasts.*`, `vpn.*`
 >
 > </details>
@@ -867,7 +867,14 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
         "playerAliases": [
             { "from": "com.github.th_ch.youtube_music", "to": "YT Music" }
         ],
-        "lyricsBackend": "Auto"
+        "lyricsBackend": "Auto",
+        "ddcEnabled": true,
+        "ddcMinWriteIntervalMs": 100,
+        "backlightDevice": "",
+        "hdrMinNits": 80,
+        "hdrMaxNits": 400,
+        "hotplugDebounceMs": 1500,
+        "brightnessRules": []
     },
     "session": {
         "enabled": true,

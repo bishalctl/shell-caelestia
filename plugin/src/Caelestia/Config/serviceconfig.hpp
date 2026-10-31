@@ -20,6 +20,19 @@ class PlayerAlias : public settings::ObjectNode {
 };
 CONFIG_LIST_TYPE(PlayerAlias, PlayerAliasList)
 
+// Per-monitor brightness override. `match` is "model:X" | "serial:X" | "name:X" (bare = name);
+// `method` is "ddc" | "backlight" | "hdr" | "apple" | "none" (empty = auto-detect);
+// hdrMinNits/hdrMaxNits override the HDR slider range for that monitor (0 = inherit).
+class BrightnessRule : public settings::ObjectNode {
+    CONFIG_NODE(BrightnessRule, settings::ObjectNode)
+
+    CONFIG_PROPERTY(QString, match, {})
+    CONFIG_PROPERTY(QString, method, {})
+    CONFIG_PROPERTY(int, hdrMinNits, 0)
+    CONFIG_PROPERTY(int, hdrMaxNits, 0)
+};
+CONFIG_LIST_TYPE(BrightnessRule, BrightnessRuleList)
+
 class ServiceConfig : public settings::ObjectNode {
     CONFIG_NODE(ServiceConfig, settings::ObjectNode)
 
@@ -43,6 +56,19 @@ class ServiceConfig : public settings::ObjectNode {
             vmap({ { u"from"_s, u"com.github.th_ch.youtube_music"_s }, { u"to"_s, u"YT Music"_s } }),
         }))
     CONFIG_GLOBAL_ENUM_PROPERTY(LyricsBackend, lyricsBackend, LyricsBackend::Auto)
+    // Escape hatch: broken DDC/CI firmware can hang the i2c bus, so all probing/writes can be disabled
+    CONFIG_GLOBAL_PROPERTY(bool, ddcEnabled, true)
+    // Keep-latest write spacing per DDC monitor; VESA floor is 50ms, raise for flaky HDMI i2c paths
+    CONFIG_GLOBAL_PROPERTY(int, ddcMinWriteIntervalMs, 100)
+    // Empty = auto-resolve (firmware > platform > raw); set to pin e.g. amdgpu_bl1 on hybrid-GPU laptops
+    CONFIG_GLOBAL_PROPERTY(QString, backlightDevice, {})
+    // Slider range for SDR white luminance on HDR monitors (nits); 80 = SDR reference white.
+    // The max is overridden per panel by its EDID-declared peak when present.
+    CONFIG_GLOBAL_PROPERTY(int, hdrMinNits, 80)
+    CONFIG_GLOBAL_PROPERTY(int, hdrMaxNits, 400)
+    // DRM hotplug events arrive in bursts during link training; debounce before re-detecting
+    CONFIG_GLOBAL_PROPERTY(int, hotplugDebounceMs, 1500)
+    CONFIG_GLOBAL_LIST(BrightnessRuleList, brightnessRules, {})
 };
 
 } // namespace caelestia::shell::config
