@@ -142,6 +142,14 @@ Scope {
         onPressed: Dictation.toggle()
     }
 
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "ephemera"
+        description: "Toggle Ephemera AI chat"
+        onPressed: EphemeraPort.toggle()
+    }
+
     IpcHandler {
         function toggle(drawer: string): void {
             if (list().split("\n").includes(drawer)) {

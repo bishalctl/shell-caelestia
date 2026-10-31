@@ -11,6 +11,7 @@
   lm_sensors,
   swappy,
   wl-clipboard,
+  libsecret,
   libqalculate,
   bash,
   hyprland,
@@ -33,6 +34,7 @@
   python3,
   dbus,
   cliphist,
+  cliproxyapi,
   debug ? false,
   withCli ? false,
   extraRuntimeDeps ? [],
@@ -50,6 +52,8 @@
       lm_sensors
       swappy
       wl-clipboard
+      libsecret # secret-tool: Ephemera API-key keyring
+      cliproxyapi # local OAuth proxy for Ephemera's "Login" auth mode
       libqalculate
       bash
       hyprland

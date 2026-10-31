@@ -191,6 +191,16 @@ ColumnLayout {
                     }
                 }
             }
+            DelegateChoice {
+                roleValue: "ephemera"
+                delegate: EntryWrapper {
+                    EphemeraButton {
+                        objectName: "taskbarEphemera"
+                        popouts: root.popouts
+                        bar: root
+                    }
+                }
+            }
         }
     }
 

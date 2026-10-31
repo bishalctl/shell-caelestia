@@ -140,6 +140,7 @@ class BarConfig : public settings::ObjectNode {
             LIST_ENTRY(activeWindow, true),
             LIST_ENTRY(spacer, true),
             LIST_ENTRY(tray, false),
+            LIST_ENTRY(ephemera, true),
             LIST_ENTRY(clock, true),
             LIST_ENTRY(statusIcons, true),
             LIST_ENTRY(power, true),

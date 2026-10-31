@@ -115,6 +115,13 @@ Item {
         }
 
         Popout {
+            name: "ephemera"
+            sourceComponent: EphemeraChat {
+                popouts: root.popouts
+            }
+        }
+
+        Popout {
             name: "kblayout"
             sourceComponent: KbLayout {}
         }

@@ -11,6 +11,7 @@ import qs.services
 import qs.modules.areapicker
 import qs.modules.background
 import qs.modules.drawers
+import qs.modules.ephemera
 import qs.modules.lock
 import qs.modules.dictation
 import qs.modules.windowswitcher
@@ -51,6 +52,7 @@ ShellRoot {
     // Modules
     Background {}
     Drawers {}
+    EphemeraPortHost {}
     AreaPicker {}
     Lock {
         id: lock
