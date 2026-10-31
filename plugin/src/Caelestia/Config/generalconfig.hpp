@@ -42,6 +42,7 @@ class GeneralIdle : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, lockBeforeSleep, true)
     CONFIG_PROPERTY(bool, inhibitWhenAudio, true)
     CONFIG_PROPERTY(bool, inhibitWhenCharging, false)
+    CONFIG_PROPERTY(bool, inhibitWhenFullscreen, true)
     CONFIG_LIST(GeneralIdleTimeoutList, timeouts,
         DEFAULT_ARG({
             vmap({
