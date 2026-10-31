@@ -17,12 +17,27 @@ StyledRect {
     required property color accent
     required property real usage
     required property real temperature
+    // UsageHistory of the backing service (Cpu.history / Gpu.history); null for no graph
+    property var history: null
 
     color: Colours.tPalette.m3surfaceContainer
     radius: Tokens.rounding.extraLarge
 
     implicitWidth: Tokens.sizes.dashboard.perfHeroCardWidth
     implicitHeight: Math.max(tempProg.implicitHeight + detailsRow.implicitHeight + Tokens.spacing.large, usageShape.implicitHeight + usageLabel.implicitHeight) + Tokens.padding.large * 2
+
+    // Usage history behind the card content, inset by the card radius so the graph's square
+    // corners stay clear of the rounded card corners
+    Loader {
+        anchors.fill: parent
+        anchors.margins: Tokens.rounding.extraLarge
+        active: root.history !== null
+
+        sourceComponent: UsageGraph {
+            history: root.history
+            colour: root.accent
+        }
+    }
 
     CircularProgress {
         id: tempProg

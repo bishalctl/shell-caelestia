@@ -53,6 +53,7 @@ ShellRoot {
     BatteryMonitor {}
     GameMode {}
     IdleInhibit {}
+    PerfHistory {}
     IdleMonitors {
         lock: lock
     }

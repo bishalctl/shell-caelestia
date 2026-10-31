@@ -6,6 +6,7 @@
 
 #include "config/enums.hpp"
 #include "tickingservice.hpp"
+#include "usagehistory.hpp"
 
 namespace caelestia::shell::services {
 
@@ -21,6 +22,7 @@ class Gpu : public TickingService {
     Q_PROPERTY(bool detecting READ detecting NOTIFY detectingChanged)
     Q_PROPERTY(qreal percentage READ percentage NOTIFY percentageChanged)
     Q_PROPERTY(qreal temperature READ temperature NOTIFY temperatureChanged)
+    Q_PROPERTY(caelestia::shell::services::UsageHistory* history READ history CONSTANT)
 
 public:
     explicit Gpu(QObject* parent = nullptr);
@@ -30,6 +32,7 @@ public:
     [[nodiscard]] bool detecting() const;
     [[nodiscard]] qreal percentage() const;
     [[nodiscard]] qreal temperature() const;
+    [[nodiscard]] UsageHistory* history() const;
 
 signals:
     void typeChanged();
@@ -67,6 +70,8 @@ private:
 
     // The config override, Auto meaning "resolve by probing". Read only to decide
     // whether to probe and which name sources apply; never exposed.
+    UsageHistory* m_history;
+
     GpuType m_userType = GpuType::Auto;
     GpuType m_type = GpuType::None;
     // The raw device name, empty while detecting and when there is no GPU to name

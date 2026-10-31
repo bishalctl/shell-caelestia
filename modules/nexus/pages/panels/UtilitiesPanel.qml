@@ -73,11 +73,18 @@ PageBase {
         }
 
         ToggleRow {
-            last: true
             text: Tr.tr("Quick toggles")
             subtext: Tr.tr("Show the quick toggles card")
             checked: Config.utilities.cards.quickToggles
             onToggled: GlobalConfig.utilities.cards.quickToggles = checked
+        }
+
+        ToggleRow {
+            last: true
+            text: Tr.tr("Primary display")
+            subtext: Tr.tr("Show the XWayland primary display selector card")
+            checked: Config.utilities.cards.displaySelect
+            onToggled: GlobalConfig.utilities.cards.displaySelect = checked
         }
 
         // Quick toggles

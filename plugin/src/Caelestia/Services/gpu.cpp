@@ -5,6 +5,7 @@
 #include <qfile.h>
 #include <qregularexpression.h>
 
+#include "config/dashboardconfig.hpp"
 #include "config/rootnodes.hpp"
 #include "config/serviceconfig.hpp"
 #include "sensorslib.hpp"
@@ -143,6 +144,11 @@ Gpu::Gpu(QObject* parent)
     : TickingService(parent) {
     m_busyFiles = gpuBusyFiles();
 
+    const auto* perf = config::ConfigSingleton::instance()->dashboard()->performance();
+    m_history = new UsageHistory(this, [perf] { return perf->gpuGraphInterval(); });
+    QObject::connect(
+        perf, &config::DashboardPerformance::gpuGraphIntervalChanged, m_history, &UsageHistory::refreshInterval);
+
     const auto* svc = caelestia::shell::config::ConfigSingleton::instance()->services();
     m_userType = svc->gpuType();
     QObject::connect(svc, &caelestia::shell::config::ServiceConfig::gpuTypeChanged, this, [this, svc] {
@@ -177,6 +183,10 @@ qreal Gpu::temperature() const {
     return m_temperature;
 }
 
+UsageHistory* Gpu::history() const {
+    return m_history;
+}
+
 void Gpu::setType(GpuType value) {
     if (value == m_type) {
         return;
@@ -209,10 +219,13 @@ void Gpu::tick() {
         readGenericUsage();
         readGpuTemperature();
     } else if (m_type == GpuType::Nvidia) {
+        // Async: records the previous sample, one tick behind
         startNvidiaUsage();
     } else {
         resetUsage();
+        return;
     }
+    m_history->record(m_percentage);
 }
 
 void Gpu::resolveGpu() {

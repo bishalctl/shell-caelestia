@@ -14,6 +14,7 @@
   libqalculate,
   bash,
   hyprland,
+  xrandr,
   material-symbols,
   rubik,
   nerd-fonts,
@@ -49,6 +50,7 @@
       libqalculate
       bash
       hyprland
+      xrandr # utilities display selector (XWayland primary output)
     ]
     ++ extraRuntimeDeps
     ++ lib.optional withCli caelestia-cli;
