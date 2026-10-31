@@ -11,6 +11,7 @@
   lm_sensors,
   swappy,
   wl-clipboard,
+  libsecret,
   libqalculate,
   bash,
   hyprland,
@@ -29,6 +30,7 @@
   pkg-config,
   caelestia-cli,
   m3shapes,
+  cliproxyapi,
   debug ? false,
   withCli ? false,
   extraRuntimeDeps ? [],
@@ -46,6 +48,8 @@
       lm_sensors
       swappy
       wl-clipboard
+      libsecret # secret-tool: Ephemera API-key keyring
+      cliproxyapi # local OAuth proxy for Ephemera's "Login" auth mode
       libqalculate
       bash
       hyprland

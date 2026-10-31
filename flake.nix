@@ -46,6 +46,7 @@
         };
         caelestia-cli = inputs.caelestia-cli.packages.${system}.default;
         m3shapes = inputs.m3shapes.packages.${system}.default;
+        cliproxyapi = pkgs.callPackage ./nix/cliproxyapi.nix {};
       };
       with-cli = caelestia-shell.override {withCli = true;};
       debug = caelestia-shell.override {debug = true;};
