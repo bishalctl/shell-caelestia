@@ -30,6 +30,8 @@ Scope {
             if (root.hasFullscreen)
                 return;
             const v = ShellState.forActive();
+            if (!v)
+                return;
             v.launcher = v.dashboard = v.osd = v.utilities = !(v.launcher || v.dashboard || v.osd || v.utilities);
         }
     }
@@ -43,6 +45,8 @@ Scope {
             if (root.hasFullscreen)
                 return;
             const screenState = ShellState.forActive();
+            if (!screenState)
+                return;
             screenState.dashboard = !screenState.dashboard;
         }
     }
@@ -56,6 +60,8 @@ Scope {
             if (root.hasFullscreen)
                 return;
             const screenState = ShellState.forActive();
+            if (!screenState)
+                return;
             screenState.session = !screenState.session;
         }
     }
@@ -69,7 +75,8 @@ Scope {
         onReleased: {
             if (!root.launcherInterrupted && !root.hasFullscreen) {
                 const screenState = ShellState.forActive();
-                screenState.launcher = !screenState.launcher;
+                if (screenState)
+                    screenState.launcher = !screenState.launcher;
             }
             root.launcherInterrupted = false;
         }
@@ -92,6 +99,8 @@ Scope {
             if (root.hasFullscreen || !Config.sidebar.enabled)
                 return;
             const screenState = ShellState.forActive();
+            if (!screenState)
+                return;
             screenState.sidebar = !screenState.sidebar;
         }
     }
@@ -105,6 +114,8 @@ Scope {
             if (root.hasFullscreen)
                 return;
             const screenState = ShellState.forActive();
+            if (!screenState)
+                return;
             screenState.utilities = !screenState.utilities;
         }
     }
@@ -137,6 +148,10 @@ Scope {
                 if (root.hasFullscreen && ["launcher", "session", "dashboard"].includes(drawer))
                     return;
                 const screenState = ShellState.forActive();
+                if (!screenState) {
+                    console.warn(lc, "No drawers registered for the focused monitor");
+                    return;
+                }
                 screenState[drawer] = !screenState[drawer];
             } else {
                 console.warn(lc, `Drawer "${drawer}" does not exist`);
@@ -145,12 +160,14 @@ Scope {
 
         function list(): string {
             const screenState = ShellState.forActive();
+            if (!screenState)
+                return "";
             return Object.keys(screenState).filter(k => typeof screenState[k] === "boolean").join("\n");
         }
 
         function isOpen(drawer: string): string {
             const screenState = ShellState.forActive();
-            if (typeof screenState[drawer] !== "boolean")
+            if (typeof screenState?.[drawer] !== "boolean")
                 return "unknown";
             return screenState[drawer] ? "1" : "0";
         }

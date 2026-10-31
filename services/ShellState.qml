@@ -20,10 +20,12 @@ Singleton {
         return null;
     }
 
+    // Match by output NAME: HyprlandMonitor objects are destroyed/recreated on hotplug and
+    // monitorFor can be null while an output is mid-hotplug, so object identity misses.
     function forActive(): ScreenState {
-        const mon = Hypr.focusedMonitor;
+        const name = Hypr.focusedMonitor?.name;
         for (const s of states.instances)
-            if (Hypr.monitorFor(s.modelData) === mon)
+            if (s.modelData.name === name)
                 return s;
         return null;
     }
@@ -36,9 +38,9 @@ Singleton {
     }
 
     function componentsForActive(): Components {
-        const mon = Hypr.focusedMonitor;
+        const name = Hypr.focusedMonitor?.name;
         for (const c of components.instances)
-            if (Hypr.monitorFor(c.modelData) === mon)
+            if (c.modelData.name === name)
                 return c;
         return null;
     }

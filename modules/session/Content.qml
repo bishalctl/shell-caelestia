@@ -20,19 +20,19 @@ Column {
     spacing: Tokens.spacing.large
 
     SessionButton {
-        id: logout
+        id: lock
 
-        icon: Config.session.icons.logout
-        command: Config.session.commands.logout
+        icon: Config.session.icons.lock
+        command: Config.session.commands.lock
 
-        KeyNavigation.down: shutdown
+        KeyNavigation.down: logout
 
         Component.onCompleted: forceActiveFocus()
 
         Connections {
             function onLauncherChanged(): void {
                 if (!root.screenState.launcher)
-                    logout.forceActiveFocus();
+                    lock.forceActiveFocus();
             }
 
             target: root.screenState
@@ -40,13 +40,33 @@ Column {
     }
 
     SessionButton {
-        id: shutdown
+        id: logout
 
-        icon: Config.session.icons.shutdown
-        command: Config.session.commands.shutdown
+        icon: Config.session.icons.logout
+        command: Config.session.commands.logout
+
+        KeyNavigation.up: lock
+        KeyNavigation.down: suspend
+    }
+
+    SessionButton {
+        id: suspend
+
+        icon: Config.session.icons.suspend
+        command: Config.session.commands.suspend
 
         KeyNavigation.up: logout
         KeyNavigation.down: hibernate
+    }
+
+    SessionButton {
+        id: hibernate
+
+        icon: Config.session.icons.hibernate
+        command: Config.session.commands.hibernate
+
+        KeyNavigation.up: suspend
+        KeyNavigation.down: reboot
     }
 
     Loader {
@@ -66,22 +86,42 @@ Column {
     }
 
     SessionButton {
-        id: hibernate
-
-        icon: Config.session.icons.hibernate
-        command: Config.session.commands.hibernate
-
-        KeyNavigation.up: shutdown
-        KeyNavigation.down: reboot
-    }
-
-    SessionButton {
         id: reboot
 
         icon: Config.session.icons.reboot
         command: Config.session.commands.reboot
 
         KeyNavigation.up: hibernate
+        KeyNavigation.down: rebootForce
+    }
+
+    SessionButton {
+        id: rebootForce
+
+        icon: Config.session.icons.rebootForce
+        command: Config.session.commands.rebootForce
+
+        KeyNavigation.up: reboot
+        KeyNavigation.down: shutdown
+    }
+
+    SessionButton {
+        id: shutdown
+
+        icon: Config.session.icons.shutdown
+        command: Config.session.commands.shutdown
+
+        KeyNavigation.up: rebootForce
+        KeyNavigation.down: shutdownForce
+    }
+
+    SessionButton {
+        id: shutdownForce
+
+        icon: Config.session.icons.shutdownForce
+        command: Config.session.commands.shutdownForce
+
+        KeyNavigation.up: shutdown
     }
 
     component SessionButton: IconButton {
