@@ -123,6 +123,14 @@ Scope {
         }
     }
 
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "dictation"
+        description: "Toggle dictation (Wispr Flow / OpenWhispr picker)"
+        onPressed: Dictation.toggle()
+    }
+
     IpcHandler {
         function toggle(drawer: string): void {
             if (list().split("\n").includes(drawer)) {
