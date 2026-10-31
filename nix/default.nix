@@ -141,6 +141,15 @@ in
 
       mkdir -p $out/lib
       ln -s ${extras}/lib/* $out/lib/
+
+      # Quickshell registers with xdg-desktop-portal under the app id
+      # "org.quickshell", but we only wrap its `qs` binary and never pull in
+      # quickshell's share/applications. Expose its desktop entry on our own
+      # share so the portal can resolve the app id (silences the
+      # "App info not found for 'org.quickshell'" warning).
+      mkdir -p $out/share/applications
+      ln -s ${qs}/share/applications/org.quickshell.desktop \
+        $out/share/applications/org.quickshell.desktop
     '';
 
     passthru = {

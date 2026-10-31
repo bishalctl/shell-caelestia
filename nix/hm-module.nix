@@ -92,6 +92,18 @@ in {
 
         Service = {
           Type = "exec";
+          # Kill stray UNMANAGED shell instances before starting the managed one.
+          # During development it's easy to launch the shell by hand (`caelestia
+          # shell`, `qs -p ...`) and forget it. systemd only supervises the process in
+          # THIS unit's cgroup, so on the next nixos-rebuild sd-switch restarts the
+          # unit's instance while the manual one survives — two shells then coexist:
+          # doubled bar/exclusive zones and a fight over caelestia:* global-shortcut
+          # registrations. The stop phase of a restart has already killed the unit's
+          # own process by the time ExecStartPre runs, so this only ever matches
+          # strays. `-` prefix: pkill exits 1 when nothing matched, which must not
+          # fail the unit. The regex anchors on the binary path (/bin/quickshell or
+          # /bin/qs), so it can't hit unrelated processes mentioning quickshell.
+          ExecStartPre = "-${pkgs.procps}/bin/pkill -ef '/bin/(quickshell|qs)( |$)'";
           ExecStart = "${shell}/bin/caelestia-shell";
           Restart = "on-failure";
           RestartSec = "5s";
