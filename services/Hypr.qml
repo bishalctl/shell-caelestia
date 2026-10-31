@@ -39,6 +39,8 @@ Singleton {
     property string lastSpecialWorkspace: ""
 
     signal configReloaded
+    // monitoradded / monitorremoved — consumers (Brightness) re-detect on this.
+    signal monitorsHotplugged
 
     function dispatch(request: string): void {
         Hyprland.dispatch(request);
@@ -93,6 +95,26 @@ Singleton {
         return Hyprland.monitorFor(screen);
     }
 
+    // Partial runtime update of a monitor rule. `selector` is the exact form of
+    // the user's config rule (e.g. "desc:<description>") so the update merges
+    // into the winning rule (hl.monitor merges; a differently-keyed selector
+    // would resurrect a stale rule). `name` is the connector for the keyword path.
+    function setMonitorRule(name: string, selector: string, fields: var): void {
+        if (usingLua) {
+            const entries = [`output = "${selector.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`];
+            for (const k in fields) {
+                const v = fields[k];
+                entries.push(typeof v === "number" ? `${k} = ${v}` : `${k} = "${v}"`);
+            }
+            extras.batchMessage([`eval hl.monitor({ ${entries.join(", ")} })`]);
+        } else {
+            const reqs = [];
+            for (const k in fields)
+                reqs.push(`keyword monitorv2[${name}]:${k} ${fields[k]}`);
+            extras.batchMessage(reqs);
+        }
+    }
+
     function trimWsName(name: string): string {
         return name.startsWith("special:") ? name.slice("special:".length) : name;
     }
@@ -127,8 +149,15 @@ Singleton {
                 return;
 
             if (n === "configreloaded") {
+                // Monitor rules (cm/HDR presets, sdr luminance) may have changed
+                // and there is no separate event for that — refresh so consumers
+                // (e.g. Brightness method resolution) see the new state.
+                Hyprland.refreshMonitors();
                 root.configReloaded();
                 root.reloadDynamicConfs();
+            } else if (n === "monitoradded" || n === "monitorremoved") {
+                root.monitorsHotplugged();
+                Hyprland.refreshMonitors();
             } else if (["workspace", "moveworkspace", "activespecial", "focusedmon"].includes(n)) {
                 Hyprland.refreshWorkspaces();
                 Hyprland.refreshMonitors();
