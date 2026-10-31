@@ -52,6 +52,15 @@ Singleton {
         dispatch(usingLua ? `hl.dsp.workspace.toggle_special("${name}")` : `togglespecialworkspace ${name}`);
     }
 
+    // address: bare hex, no 0x prefix (HyprlandToplevel.address)
+    function focusWindow(address: string): void {
+        dispatch(usingLua ? `hl.dsp.focus({ window = "address:0x${address}" })` : `focuswindow address:0x${address}`);
+    }
+
+    function submap(name: string): void {
+        dispatch(usingLua ? `hl.dsp.submap("${name}")` : `submap ${name}`);
+    }
+
     function cycleSpecialWorkspace(direction: string): void {
         const openSpecials = workspaces.values.filter(w => w.name.startsWith("special:") && w.lastIpcObject.windows > 0);
 

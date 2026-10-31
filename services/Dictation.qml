@@ -1,0 +1,197 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Hyprland
+import Quickshell.Io
+import Caelestia
+import Caelestia.I18n
+import qs.utils
+
+// Front-end for voice dictation with two engines:
+//  - Wispr Flow:  driven via `wispr-flow wispr-flow://{start,stop}-hands-free`
+//  - OpenWhispr:  driven via its D-Bus `Toggle` (start when idle, stop->transcribe->paste)
+// Neither engine reports state back to us, so we drive our own listening/converting state and
+// visualise it in the bottom popup. The hotkey first opens a picker (DictationPicker) to choose
+// the engine; pressing the hotkey again cycles the selection, Enter/click starts it.
+Singleton {
+    id: root
+
+    readonly property string service: "com.openwhispr.App"
+    readonly property string path: "/com/openwhispr/App"
+    readonly property string iface: "com.openwhispr.App"
+
+    readonly property var providers: [
+        {
+            id: "wisprflow",
+            name: Tr.tr("Wispr Flow")
+        },
+        {
+            id: "openwhispr",
+            name: Tr.tr("Open Whispr")
+        }
+    ]
+
+    // Engine of the current/last session. Remembered so the picker preselects it next time.
+    property string provider: "wisprflow"
+    readonly property string providerName: providers.find(p => p.id === provider)?.name ?? ""
+
+    property bool pickerOpen: false
+    property int pickerIndex: 0
+
+    // Window focused before the picker grabbed keyboard focus. Restored after the picker closes
+    // (confirm or Escape) so the engine's auto-paste lands in the text field the user was in.
+    property string _prevAddress
+
+    // "idle" | "listening" | "converting"
+    property string state: "idle"
+    readonly property bool active: state !== "idle"
+    readonly property string statusText: state === "converting" ? Tr.tr("Converting…") : Tr.tr("Listening…")
+
+    // Neither engine signals "done", so we close after a heuristic conversion window.
+    // The transcription + paste still complete inside the engine regardless of our popup.
+    property int convertTimeout: 3500
+
+    function _toggleWhispr(): void {
+        Quickshell.execDetached(["dbus-send", "--session", "--type=method_call", `--dest=${root.service}`, root.path, `${root.iface}.Toggle`]);
+    }
+
+    // Tell the engine to finish the session, without touching our UI state.
+    function _stopEngine(providerId: string): void {
+        if (providerId === "wisprflow")
+            Quickshell.execDetached(["app2unit", "--", "wispr-flow", "wispr-flow://stop-hands-free"]);
+        else
+            _toggleWhispr();
+    }
+
+    function toggle(): void {
+        if (state === "converting")
+            return;
+
+        if (state === "listening") {
+            stop();
+            return;
+        }
+
+        // Idle: first press opens the picker, further presses cycle the selection.
+        if (pickerOpen)
+            pickerIndex = (pickerIndex + 1) % providers.length;
+        else
+            openPicker();
+    }
+
+    function openPicker(): void {
+        _prevAddress = Hyprland.activeToplevel?.address ?? "";
+        pickerIndex = Math.max(0, providers.findIndex(p => p.id === provider));
+        pickerOpen = true;
+    }
+
+    function closePicker(): void {
+        pickerOpen = false;
+        refocusTimer.restart();
+    }
+
+    // Dismissal via focus grab clear: the user focused another window on purpose,
+    // so don't steal focus back to the remembered one.
+    function dismissPicker(): void {
+        if (!pickerOpen)
+            return;
+        pickerOpen = false;
+        _prevAddress = "";
+    }
+
+    function confirmPicker(): void {
+        start(providers[pickerIndex].id);
+    }
+
+    function start(providerId: string): void {
+        pickerOpen = false;
+        provider = providerId;
+
+        if (providerId === "wisprflow")
+            Quickshell.execDetached(["app2unit", "--", "wispr-flow", "wispr-flow://start-hands-free"]);
+        else
+            _toggleWhispr();
+
+        state = "listening";
+        sessionFile.setText(JSON.stringify({ provider: providerId, state: "listening" }));
+        refocusTimer.restart();
+    }
+
+    function stop(): void {
+        _stopEngine(provider);
+        state = "converting";
+        sessionFile.setText("");
+        convertTimer.restart();
+    }
+
+    // Never leave the engine recording with no shell UI. The engine runs in its own
+    // systemd unit, so it survives the shell dying mid-dictation; on a clean shutdown
+    // we stop it directly, and the crash path is reconciled at next startup below.
+    Component.onDestruction: {
+        if (state === "listening")
+            _stopEngine(provider);
+    }
+
+    // Startup reconcile: a leftover "listening" session file means the shell died
+    // mid-dictation. Complete the session (the transcript stays available in the
+    // engine's own app) rather than adopting it — a mic recording with no UI is worse.
+    FileView {
+        id: sessionFile
+
+        printErrors: false
+        path: `${Paths.state}/dictation-session.json`
+        onLoaded: {
+            if (text() === "" || root.state !== "idle")
+                return;
+            try {
+                const s = JSON.parse(text());
+                if (s.state === "listening" && root.providers.some(p => p.id === s.provider)) {
+                    root._stopEngine(s.provider);
+                    Toaster.toast(Tr.tr("Dictation session completed"), Tr.tr("The shell exited mid-dictation — open %1 for the text").arg(root.providers.find(p => p.id === s.provider).name), "mic_off");
+                }
+            } catch (e) {}
+            setText("");
+        }
+    }
+
+    Timer {
+        id: convertTimer
+
+        interval: root.convertTimeout
+        onTriggered: root.state = "idle"
+    }
+
+    Timer {
+        id: refocusTimer
+
+        // Give the compositor a beat to release the picker's exclusive keyboard focus first.
+        interval: 80
+        onTriggered: {
+            if (root._prevAddress)
+                Hypr.focusWindow(root._prevAddress); // Lua/classic form chosen by Hypr
+            root._prevAddress = "";
+        }
+    }
+
+    IpcHandler {
+        function toggle(): void {
+            root.toggle();
+        }
+
+        function start(provider: string): void {
+            root.start(provider);
+        }
+
+        function stop(): void {
+            if (root.state === "listening")
+                root.stop();
+        }
+
+        function getState(): string {
+            return root.state;
+        }
+
+        target: "dictation"
+    }
+}
