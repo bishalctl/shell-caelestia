@@ -22,7 +22,7 @@ StyledRect {
     readonly property list<var> activeNotifs: notifs.filter(n => !n.closed)
     readonly property int notifCount: activeNotifs.length
     readonly property string image: activeNotifs.find(n => n.image.length > 0)?.image ?? ""
-    readonly property string appIcon: activeNotifs.find(n => n.appIcon.length > 0)?.appIcon ?? ""
+    readonly property string appIcon: activeNotifs.find(n => n.resolvedAppIcon.length > 0)?.resolvedAppIcon ?? ""
     readonly property int urgency: {
         if (activeNotifs.find(n => n.urgency === NotificationUrgency.Critical))
             return NotificationUrgency.Critical;
@@ -101,9 +101,9 @@ StyledRect {
 
                 ColouredIcon {
                     implicitSize: Math.round(TokenConfig.sizes.notifs.image * 0.6)
-                    source: Quickshell.iconPath(root.appIcon)
+                    source: root.appIcon
                     colour: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : root.urgency === NotificationUrgency.Low ? Colours.palette.m3onSurface : Colours.palette.m3onSecondaryContainer
-                    layer.enabled: root.appIcon.endsWith("symbolic")
+                    layer.enabled: root.appIcon.includes("symbolic")
                 }
             }
 
@@ -146,9 +146,9 @@ StyledRect {
                     ColouredIcon {
                         anchors.centerIn: parent
                         implicitSize: Math.round(Tokens.sizes.notifs.badge * 0.6)
-                        source: Quickshell.iconPath(root.appIcon)
+                        source: root.appIcon
                         colour: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : root.urgency === NotificationUrgency.Low ? Colours.palette.m3onSurface : Colours.palette.m3onSecondaryContainer
-                        layer.enabled: root.appIcon.endsWith("symbolic")
+                        layer.enabled: root.appIcon.includes("symbolic")
                     }
                 }
             }
@@ -229,6 +229,32 @@ StyledRect {
                                 Anim {}
                             }
                         }
+                    }
+                }
+
+                // Dismiss only this group's notifications (distinct from clear-all).
+                StyledRect {
+                    implicitWidth: dismissIcon.implicitWidth + Tokens.padding.small * 2
+                    implicitHeight: groupCount.implicitHeight + Tokens.padding.extraSmall
+
+                    color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3error : Colours.layer(Colours.palette.m3surfaceContainerHigh, 3)
+                    radius: Tokens.rounding.full
+
+                    StateLayer {
+                        color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : Colours.palette.m3onSurface
+                        onClicked: {
+                            for (const n of root.activeNotifs.slice())
+                                n.close();
+                        }
+                    }
+
+                    MaterialIcon {
+                        id: dismissIcon
+
+                        anchors.centerIn: parent
+                        text: "close"
+                        color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : Colours.palette.m3onSurfaceVariant
+                        fontStyle: Tokens.font.icon.small
                     }
                 }
             }

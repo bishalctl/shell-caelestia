@@ -16,8 +16,9 @@ StyledRect {
     id: root
 
     required property NotifData modelData
+    required property ScreenState screenState
     readonly property bool hasImage: modelData.image.length > 0
-    readonly property bool hasAppIcon: modelData.appIcon.length > 0
+    readonly property bool hasAppIcon: modelData.resolvedAppIcon.length > 0
     readonly property int bodyTextFormat: /[<*_`#\[\]]/.test(modelData.body) ? Text.MarkdownText : Text.PlainText
     readonly property int nonAnimHeight: summary.implicitHeight + (root.expanded ? Tokens.spacing.extraSmall * 2 + appName.height + body.height + actions.height + actions.anchors.topMargin : bodyPreview.height) + inner.anchors.margins * 2
     property bool expanded: Config.notifs.openExpanded
@@ -81,12 +82,21 @@ StyledRect {
             }
         }
         onClicked: event => {
-            if (!GlobalConfig.notifs.actionOnClick || event.button !== Qt.LeftButton)
+            if (event.button !== Qt.LeftButton)
                 return;
 
-            const actions = root.modelData.actions;
-            if (actions.length === 1)
-                actions[0].invoke();
+            // If configured for action-on-click and there's exactly one action, fire it.
+            if (GlobalConfig.notifs.actionOnClick) {
+                const actions = root.modelData.actions;
+                if (actions.length === 1) {
+                    actions[0].invoke();
+                    return;
+                }
+            }
+
+            // Otherwise a click opens the notification panel on this screen and dismisses the popup.
+            root.screenState.sidebar = true;
+            root.modelData.popup = false;
         }
 
         Item {
@@ -165,9 +175,9 @@ StyledRect {
 
                         sourceComponent: ColouredIcon {
                             anchors.fill: parent
-                            source: Quickshell.iconPath(root.modelData.appIcon)
+                            source: root.modelData.resolvedAppIcon
                             colour: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : root.modelData.urgency === NotificationUrgency.Low ? Colours.palette.m3onSurface : Colours.palette.m3onSecondaryContainer
-                            layer.enabled: root.modelData.appIcon.endsWith("symbolic")
+                            layer.enabled: root.modelData.resolvedAppIcon.includes("symbolic")
                         }
                     }
 
@@ -250,7 +260,7 @@ StyledRect {
                 text: root.modelData.appName
                 font: appName.font
                 elide: Text.ElideRight
-                elideWidth: expandBtn.x - time.width - timeSep.width - summary.x - root.Tokens.spacing.small * 3
+                elideWidth: closeBtn.x - time.width - timeSep.width - summary.x - root.Tokens.spacing.small * 3
             }
 
             StyledText {
@@ -304,7 +314,7 @@ StyledRect {
                 text: root.modelData.summary
                 font: summary.font
                 elide: Text.ElideRight
-                elideWidth: expandBtn.x - time.width - timeSep.width - summary.x - root.Tokens.spacing.small * 3
+                elideWidth: closeBtn.x - time.width - timeSep.width - summary.x - root.Tokens.spacing.small * 3
             }
 
             StyledText {
@@ -382,16 +392,42 @@ StyledRect {
                 }
             }
 
+            // Quick-dismiss: removes the floating popup immediately (it stays in the notification panel).
+            Item {
+                id: closeBtn
+
+                anchors.right: expandBtn.left
+                anchors.top: parent.top
+                anchors.topMargin: -Tokens.padding.extraSmall
+                anchors.rightMargin: Tokens.spacing.small
+
+                implicitWidth: closeIcon.implicitHeight
+                implicitHeight: closeIcon.implicitHeight
+
+                StateLayer {
+                    radius: Tokens.rounding.full
+                    color: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+                    onClicked: root.modelData.popup = false
+                }
+
+                MaterialIcon {
+                    id: closeIcon
+
+                    anchors.centerIn: parent
+                    text: "close"
+                    fontStyle: Tokens.font.icon.medium
+                }
+            }
+
             StyledText {
                 id: bodyPreview
 
                 anchors.left: summary.left
-                anchors.right: expandBtn.left
+                anchors.right: closeBtn.left
                 anchors.top: summary.bottom
                 anchors.rightMargin: Tokens.spacing.small
 
                 animate: true
-                textFormat: root.bodyTextFormat
                 text: bodyPreviewMetrics.elidedText
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.small
@@ -408,7 +444,8 @@ StyledRect {
             TextMetrics {
                 id: bodyPreviewMetrics
 
-                text: root.modelData.body
+                // plainBody: eliding rich text mid-tag would show raw HTML
+                text: root.modelData.plainBody
                 font: bodyPreview.font
                 elide: Text.ElideRight
                 elideWidth: bodyPreview.width

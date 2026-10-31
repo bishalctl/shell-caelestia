@@ -80,8 +80,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: title.bottom
-        anchors.bottom: parent.bottom
+        anchors.bottom: bottomBar.top
         anchors.topMargin: Tokens.spacing.medium
+        anchors.bottomMargin: Tokens.spacing.medium
 
         radius: Tokens.rounding.medium
         color: "transparent"
@@ -172,18 +173,45 @@ Item {
         }
     }
 
-    Loader {
-        asynchronous: true
+    // Bottom bar: display mode (full / peek / do not disturb) and sound toggles on the left,
+    // clear-all on the right. The list is docked above it (see clipRect).
+    RowLayout {
+        id: bottomBar
+
+        anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: Tokens.padding.medium
+        anchors.margins: Tokens.padding.extraSmall
+        spacing: Tokens.spacing.small
 
-        scale: root.notifCount > 0 ? 1 : 0.5
-        opacity: root.notifCount > 0 ? 1 : 0
-        active: opacity > 0
+        IconButton {
+            type: IconButton.Tonal
+            isToggle: true
+            checked: Notifs.mode !== "default"
+            icon: Notifs.dnd ? "do_not_disturb_on" : Notifs.peek ? "notifications_paused" : "notifications_active"
+            font: Tokens.font.icon.large
+            onClicked: Notifs.cycleMode()
+        }
 
-        sourceComponent: IconButton {
+        IconButton {
+            type: IconButton.Tonal
+            isToggle: true
+            checked: Notifs.soundEnabled
+            icon: Notifs.soundEnabled ? "volume_up" : "volume_off"
+            font: Tokens.font.icon.large
+            onClicked: Notifs.toggleSound()
+        }
+
+        Item {
+            Layout.fillWidth: true
+        }
+
+        IconButton {
             id: clearBtn
+
+            scale: root.notifCount > 0 ? 1 : 0.5
+            opacity: root.notifCount > 0 ? 1 : 0
+            enabled: opacity > 0
 
             icon: "clear_all"
             font: Tokens.font.icon.large
@@ -195,17 +223,17 @@ Item {
                 z: -1
                 level: clearBtn.stateLayer.containsMouse ? 4 : 3
             }
-        }
 
-        Behavior on scale {
-            Anim {
-                type: Anim.FastSpatial
+            Behavior on scale {
+                Anim {
+                    type: Anim.FastSpatial
+                }
             }
-        }
 
-        Behavior on opacity {
-            Anim {
-                type: Anim.DefaultEffects
+            Behavior on opacity {
+                Anim {
+                    type: Anim.DefaultEffects
+                }
             }
         }
     }

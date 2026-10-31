@@ -20,12 +20,16 @@ Item {
     required property Item utilitiesPanel
     readonly property int padding: Tokens.padding.large
     readonly property int clampedPadding: CUtils.clamp(padding - Config.border.thickness, 0, padding)
+    // In peek mode popups shrink to just a circular app badge, so the panel (and its background,
+    // sized to this item) hugs the badge instead of leaving a full-width blank behind it.
+    readonly property bool peek: Notifs.peek
+    readonly property real peekSize: TokenConfig.sizes.notifs.image
 
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     anchors.right: parent.right
 
-    implicitWidth: Tokens.sizes.notifs.width
+    implicitWidth: peek ? peekSize + padding + clampedPadding : Tokens.sizes.notifs.width
     implicitHeight: {
         const count = list.count;
         if (count === 0)
@@ -145,7 +149,8 @@ Item {
 
         required property NotifData modelData
         required property int index
-        readonly property alias nonAnimHeight: notif.nonAnimHeight
+        readonly property bool peek: root.peek
+        readonly property real nonAnimHeight: peek ? root.peekSize : notif.nonAnimHeight
         property int idx
 
         onIndexChanged: {
@@ -153,8 +158,8 @@ Item {
                 idx = index;
         }
 
-        implicitWidth: notif.implicitWidth
-        implicitHeight: notif.implicitHeight + (idx === 0 ? 0 : Tokens.spacing.medium)
+        implicitWidth: peek ? root.peekSize : notif.implicitWidth
+        implicitHeight: (peek ? root.peekSize : notif.implicitHeight) + (idx === 0 ? 0 : Tokens.spacing.medium)
 
         ListView.onRemove: removeAnim.start()
 
@@ -196,6 +201,8 @@ Item {
         }
 
         ClipRect {
+            visible: !wrapper.peek
+
             anchors.top: parent.top
             anchors.topMargin: wrapper.idx === 0 ? 0 : Tokens.spacing.medium
 
@@ -208,7 +215,22 @@ Item {
                 id: notif
 
                 modelData: wrapper.modelData
-                implicitWidth: root.implicitWidth - root.padding - root.clampedPadding
+                screenState: root.screenState
+                implicitWidth: Tokens.sizes.notifs.width - root.padding - root.clampedPadding
+            }
+        }
+
+        // Peek mode: render only a small circular app badge at the top-right instead of the full card.
+        Loader {
+            active: wrapper.peek
+
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: wrapper.idx === 0 ? 0 : Tokens.spacing.medium
+
+            sourceComponent: Peek {
+                modelData: wrapper.modelData
+                screenState: root.screenState
             }
         }
     }

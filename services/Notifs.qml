@@ -20,7 +20,53 @@ Singleton {
     readonly property list<NotifData> notClosed: list.filter(n => !n.closed)
     readonly property list<NotifData> popups: list.filter(n => n.popup)
 
+    // Popup display mode, derived from persistent state: "default" full cards, "peek" a small
+    // app-icon badge only, "dnd" no popups at all (history still accrues). DND is upstream's
+    // PersistentState.doNotDisturb so the quick toggle, shortcut and IPC keep working; peek is ours.
+    readonly property bool dnd: PersistentState.doNotDisturb
+    readonly property bool peek: !dnd && PersistentState.notifPeek
+    readonly property string mode: dnd ? "dnd" : peek ? "peek" : "default"
+
+    // Notification sound, independent of the display mode. Other parts of the shell (e.g. a
+    // dictation module whose mic would pick the chime up) can set soundSuppressed to mute it.
+    readonly property bool soundEnabled: PersistentState.notifSound
+    property bool soundSuppressed
+    readonly property string soundFile: GlobalConfig.notifs.soundPath || Quickshell.shellPath("assets/sounds/notification.wav")
+
     property bool loaded
+
+    function cycleMode(): void {
+        if (dnd) {
+            PersistentState.notifPeek = false;
+            PersistentState.doNotDisturb = false;
+        } else if (peek) {
+            PersistentState.doNotDisturb = true;
+            PersistentState.notifPeek = false;
+        } else {
+            PersistentState.notifPeek = true;
+        }
+    }
+
+    function setMode(m: string): void {
+        PersistentState.doNotDisturb = m === "dnd";
+        PersistentState.notifPeek = m === "peek";
+    }
+
+    function toggleSound(): void {
+        PersistentState.notifSound = !PersistentState.notifSound;
+    }
+
+    // Cooldown-debounced so a burst of notifications doesn't stack chimes.
+    function playSound(): void {
+        if (!soundEnabled || soundSuppressed || soundCooldown.running)
+            return;
+        const args = ["pw-play"];
+        if (GlobalConfig.notifs.soundTarget)
+            args.push("--target", GlobalConfig.notifs.soundTarget);
+        args.push(soundFile);
+        Quickshell.execDetached(args);
+        soundCooldown.restart();
+    }
 
     function hasFullscreen(): bool {
         for (const monitor of Hypr.monitors.values) {
@@ -50,11 +96,29 @@ Singleton {
 
             if (PersistentState.doNotDisturb)
                 Toaster.toast(Tr.tr("Do not disturb enabled"), Tr.tr("Popup notifications are now disabled"), "do_not_disturb_on");
+            else if (PersistentState.notifPeek)
+                Toaster.toast(Tr.tr("Peek mode"), Tr.tr("Notifications show as a small badge"), "notifications_paused");
             else
                 Toaster.toast(Tr.tr("Do not disturb disabled"), Tr.tr("Popup notifications are now enabled"), "do_not_disturb_off");
         }
 
+        function onNotifPeekChanged(): void {
+            if (!GlobalConfig.utilities.toasts.dndChanged || PersistentState.doNotDisturb)
+                return;
+
+            if (PersistentState.notifPeek)
+                Toaster.toast(Tr.tr("Peek mode"), Tr.tr("Notifications show as a small badge"), "notifications_paused");
+            else
+                Toaster.toast(Tr.tr("Peek mode disabled"), Tr.tr("Popup notifications are shown in full"), "notifications_active");
+        }
+
         target: PersistentState
+    }
+
+    Timer {
+        id: soundCooldown
+
+        interval: 300
     }
 
     Timer {
@@ -96,6 +160,7 @@ Singleton {
                 notification: notif
             });
             root.list = [comp, ...root.list];
+            root.playSound();
         }
     }
 
@@ -168,6 +233,26 @@ Singleton {
 
         function disableDnd(): void {
             PersistentState.doNotDisturb = false;
+        }
+
+        function getMode(): string {
+            return root.mode;
+        }
+
+        function setMode(m: string): void {
+            root.setMode(m);
+        }
+
+        function cycleMode(): void {
+            root.cycleMode();
+        }
+
+        function isSoundEnabled(): bool {
+            return root.soundEnabled;
+        }
+
+        function toggleSound(): void {
+            root.toggleSound();
         }
 
         target: "notifs"
