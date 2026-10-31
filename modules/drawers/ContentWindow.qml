@@ -66,7 +66,10 @@ StyledWindow {
 
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen ? WlrLayer.Overlay : WlrLayer.Top
+    // Fullscreen clients render above the Top layer, so this window is invisible over them unless it
+    // is lifted to Overlay. Always lift when showOverFullscreen is set; otherwise lift only while the
+    // volume/brightness OSD is on screen so it stays visible over fullscreen windows.
+    WlrLayershell.layer: fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || panels.osd.visible) ? WlrLayer.Overlay : WlrLayer.Top
     // Single owner of this window's keyboard focus. The bar popouts live in THIS window, so their
     // keyboard needs (ephemera, wireless-password, detached control-centre) are folded in here —
     // the popouts Wrapper must NOT also bind this property, or the two fight and focus flickers.

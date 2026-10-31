@@ -36,9 +36,9 @@ class SessionCommands : public ConfigObject {
     CONFIG_PROPERTY(QStringList, suspend, { u"systemctl"_s, u"suspend"_s })
     CONFIG_PROPERTY(QStringList, hibernate, { u"systemctl"_s, u"hibernate"_s })
     CONFIG_PROPERTY(QStringList, reboot, { u"systemctl"_s, u"reboot"_s })
-    CONFIG_PROPERTY(QStringList, rebootForce, { u"systemctl"_s, u"reboot"_s, u"-f"_s })
+    CONFIG_PROPERTY(QStringList, rebootForce, { u"sudo"_s, u"-n"_s, u"systemctl"_s, u"reboot"_s, u"-f"_s })
     CONFIG_PROPERTY(QStringList, shutdown, { u"systemctl"_s, u"poweroff"_s })
-    CONFIG_PROPERTY(QStringList, shutdownForce, { u"systemctl"_s, u"poweroff"_s, u"-f"_s })
+    CONFIG_PROPERTY(QStringList, shutdownForce, { u"sudo"_s, u"-n"_s, u"systemctl"_s, u"poweroff"_s, u"-f"_s })
 
 public:
     explicit SessionCommands(QObject* parent = nullptr)
