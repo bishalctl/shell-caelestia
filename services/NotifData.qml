@@ -79,7 +79,10 @@ QtObject {
         }
         if (!appIcon)
             return "";
-        if (appIcon.startsWith("/") || appIcon.startsWith("file://") || appIcon.startsWith("image://"))
+        // Absolute paths must carry a scheme: IconImage resolves bare paths as qrc:/.
+        if (appIcon.startsWith("/"))
+            return "file://" + appIcon;
+        if (appIcon.startsWith("file://") || appIcon.startsWith("image://"))
             return appIcon;
         return Quickshell.iconPath(appIcon, true);
     }
