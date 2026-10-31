@@ -170,6 +170,24 @@ To set the wallpaper, you can type `>wallpaper` in the launcher to open the wall
 Alternatively, you can also use `caelestia wallpaper -f <path_to_wallpaper>` to set the wallpaper directly.
 Use `caelestia wallpaper -h` for more info about this command.
 
+### Keep Awake
+
+The utilities drawer's **Keep awake** card has three levels of idle protection:
+
+- The main switch keeps the session fully awake (no idle lock, screen off or sleep).
+- **Automatic when fullscreen** (`general.idle.inhibitWhenFullscreen`, on by default) applies the same
+  protection while a fullscreen window is visible on any monitor or open special workspace, so games
+  played with a controller or cutscenes don't trigger idle timeouts. Normal timeouts resume when no
+  fullscreen window is visible.
+- **Block sleep only** lets idle lock and screen off fire normally but blocks sleep-type timeouts
+  (suspend/hibernate), for leaving jobs running behind a locked screen. The **Lock now** button locks
+  the session and blanks the screens immediately.
+
+Both manual modes persist across shell restarts. For scripts, `caelestia shell idleInhibitor getMode`
+reports `off`, `full` or `sleepOnly` (`setMode <mode>`, `toggle`, `toggleSleepOnly` change it),
+`isInhibiting` reports whether manual or fullscreen protection is active and `isFullscreenActive`
+reports fullscreen protection specifically.
+
 ## Updating
 
 ### Packaged install (AUR)
@@ -430,6 +448,7 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
             "lockBeforeSleep": true,
             "inhibitWhenAudio": true,
             "inhibitWhenCharging": false,
+            "inhibitWhenFullscreen": true,
             "timeouts": [
                 {
                     "timeout": 180,
