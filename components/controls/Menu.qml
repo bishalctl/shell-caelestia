@@ -38,6 +38,9 @@ MouseArea {
     property bool hoverPassthrough
     // Square the left corners so the menu reads as an extension of the surface it flies out of.
     property bool flushLeft
+    // The host draws the menu's background itself (e.g. as a blob in the drawer window), so
+    // render only the contents here.
+    property bool blobBackground
 
     signal itemSelected(item: MenuItem)
 
@@ -93,7 +96,7 @@ MouseArea {
         }
 
         radius: Tokens.rounding.large
-        level: 2
+        level: root.blobBackground ? 0 : 2
 
         implicitWidth: Math.max(200, column.implicitWidth + column.anchors.margins * 2)
         implicitHeight: column.implicitHeight + column.anchors.margins * 2
@@ -118,7 +121,7 @@ MouseArea {
             radius: parent.radius
             topLeftRadius: root.flushLeft ? 0 : radius
             bottomLeftRadius: root.flushLeft ? 0 : radius
-            color: Colours.palette.m3surfaceContainerLow
+            color: root.blobBackground ? "transparent" : Colours.palette.m3surfaceContainerLow
 
             ColumnLayout {
                 id: column

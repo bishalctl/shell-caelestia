@@ -75,7 +75,7 @@ Region {
     // A popout's flyout (e.g. the audio device menu beside it) lives outside the popout
     // wrapper, so it needs its own input region, plus the gap back to the popout.
     Region {
-        readonly property Item flyout: root.panels.popouts.flyout
+        readonly property Item flyout: root.panels.popouts.flyoutOpen ? root.panels.popouts.flyout : null
         readonly property real slack: root.win.contentItem.Tokens.padding.large * 3
 
         x: flyout ? flyout.x - slack : 0

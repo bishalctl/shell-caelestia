@@ -37,7 +37,7 @@ CustomMouseArea {
     // A popout's registered flyout (e.g. the audio device menu beside it) counts as part of it.
     function inFlyout(x: real, y: real): bool {
         const f = popouts.flyout;
-        if (!f || !f.visible)
+        if (!f || !f.visible || !popouts.flyoutOpen)
             return false;
         const p = f.mapToItem(root, 0, 0);
         // Include the gap between the popout and the flyout so crossing it doesn't close the popout

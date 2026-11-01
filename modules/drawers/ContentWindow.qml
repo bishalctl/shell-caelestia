@@ -254,6 +254,31 @@ StyledWindow {
                 Anim {}
             }
         }
+
+        // Bubble background for a popout's flyout (e.g. the audio device menu). It grows out of
+        // the popout's edge and merges with it through the blob group like every other panel.
+        BlobRect {
+            id: flyoutBg
+
+            readonly property Item flyout: panels.popouts.flyout
+            readonly property bool open: flyout !== null && panels.popouts.flyoutOpen
+
+            group: blobGroup
+            x: flyout?.x ?? 0
+            y: flyout?.y ?? 0
+            implicitWidth: open ? flyout.width : 0
+            implicitHeight: open ? flyout.height : 0
+            radius: Tokens.rounding.large
+            deformScale: (0.15 * Config.appearance.deformScale) / 10000
+
+            Behavior on implicitWidth {
+                Anim {}
+            }
+
+            Behavior on implicitHeight {
+                Anim {}
+            }
+        }
     }
 
     Interactions {

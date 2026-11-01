@@ -50,8 +50,10 @@ Item {
     }
     Component.onDestruction: {
         Alsa.refCount--;
-        if (root.popouts.flyout)
+        if (root.popouts.flyout) {
+            root.popouts.flyoutOpen = false;
             root.popouts.flyout = null;
+        }
     }
 
     Flickable {
@@ -439,6 +441,7 @@ Item {
             attachTo: ds
             hoverPassthrough: true
             flushLeft: true
+            blobBackground: true
             // Fly out beside the popout: the menu's left edge sits on the popout's right edge
             // (overlapping by a pixel so no seam shows), top aligned with this row.
             attachSideX: Menu.Right
@@ -448,8 +451,16 @@ Item {
             marginX: root.width - ds.mapToItem(root, ds.width, 0).x + Tokens.padding.large - 1
             items: dsItems.instances
             onItemSelected: item => ds.selected(item.value)
-            // Keep the popout alive while the cursor is over the flyout
-            onExpandedChanged: root.popouts.flyout = expanded ? panel : (root.popouts.flyout === panel ? null : root.popouts.flyout)
+            // Register as the popout's flyout: keeps the popout alive while the cursor is over
+            // the menu and lets the drawer window draw its bubble background.
+            onExpandedChanged: {
+                if (expanded) {
+                    root.popouts.flyout = panel;
+                    root.popouts.flyoutOpen = true;
+                } else if (root.popouts.flyout === panel) {
+                    root.popouts.flyoutOpen = false;
+                }
+            }
         }
 
         // Menu assigns `active` directly on selection, which would break a plain binding;
