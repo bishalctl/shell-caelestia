@@ -97,6 +97,8 @@ MouseArea {
 
         radius: Tokens.rounding.large
         level: root.blobBackground ? 0 : 2
+        // In blob mode the host paints the surface; an unblurred shadow would just darken it.
+        color: root.blobBackground ? "transparent" : Qt.alpha(Colours.palette.m3shadow, 0.7)
 
         implicitWidth: Math.max(200, column.implicitWidth + column.anchors.margins * 2)
         implicitHeight: column.implicitHeight + column.anchors.margins * 2
