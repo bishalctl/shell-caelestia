@@ -50,6 +50,7 @@ Item {
                 required property var modelData
 
                 iconName: modelData.iconName
+                iconSource: modelData.iconSource ?? ""
                 text: modelData.text
             }
         }
@@ -113,6 +114,8 @@ Item {
         id: tab
 
         required property string iconName
+        // An SVG from assets/icons, used in place of the Material glyph when set
+        property string iconSource
         readonly property bool current: TabBar.tabBar.currentItem === this
 
         Layout.fillWidth: true
@@ -132,7 +135,7 @@ Item {
             }
 
             implicitWidth: Math.max(icon.width, label.width)
-            implicitHeight: icon.height + label.height
+            implicitHeight: (tab.iconSource ? svgIcon.height : icon.height) + label.height
 
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -153,12 +156,25 @@ Item {
                 onClicked: root.screenState.dashboardTab = tab.TabBar.index
             }
 
+            SvgIcon {
+                id: svgIcon
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: label.top
+
+                visible: tab.iconSource !== ""
+                name: tab.iconSource || "airdrop"
+                color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                fontStyle: Tokens.font.icon.medium
+            }
+
             MaterialIcon {
                 id: icon
 
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: label.top
 
+                visible: tab.iconSource === ""
                 text: tab.iconName
                 color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                 fill: tab.current ? 1 : 0

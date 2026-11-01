@@ -81,12 +81,11 @@ Item {
                 radius: Tokens.rounding.full
                 color: AirDrop.radioState === "up" ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
 
-                MaterialIcon {
+                SvgIcon {
                     anchors.centerIn: parent
-                    text: "ios_share"
+                    name: "airdrop"
                     fontStyle: Tokens.font.icon.extraLarge
                     color: AirDrop.radioState === "up" ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
-                    animate: true
                 }
 
                 // Pulse while visible
@@ -219,7 +218,7 @@ Item {
                         Layout.fillWidth: true
 
                         StyledText {
-                            text: Tr.tr("%1 wants to send you").arg(AirDrop.pending?.sender ?? "")
+                            text: (AirDrop.pending?.auto ? Tr.tr("Receiving from %1") : Tr.tr("%1 wants to send you")).arg(AirDrop.pending?.sender ?? "")
                             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
                             color: Colours.palette.m3onSurface
                         }
@@ -232,9 +231,16 @@ Item {
                     }
 
                     StyledText {
+                        visible: !(AirDrop.pending?.auto ?? false)
                         text: Tr.tr("%1 s").arg(AirDrop.pendingRemaining)
                         font: Tokens.font.label.medium
                         color: Colours.palette.m3onSurfaceVariant
+                    }
+
+                    CircularIndicator {
+                        visible: AirDrop.pending?.auto ?? false
+                        implicitWidth: 20
+                        implicitHeight: 20
                     }
                 }
 
@@ -291,6 +297,7 @@ Item {
                 }
 
                 RowLayout {
+                    visible: !(AirDrop.pending?.auto ?? false)
                     Layout.alignment: Qt.AlignRight
                     spacing: Tokens.spacing.small
 
@@ -526,7 +533,18 @@ Item {
 
         // ---- transfers ---------------------------------------------------------------------
         Card {
-            visible: AirDrop.sends.length > 0 || AirDrop.received.length > 0
+            id: transfersCard
+
+            // Sends first (they're live), then what came in. Five rows show; more scroll.
+            readonly property var rows: [...AirDrop.sends.map(s => Object.assign({
+                        row: "send"
+                    }, s)), ...AirDrop.received.map(r => Object.assign({
+                        row: "recv"
+                    }, r))]
+            readonly property int rowHeight: 44
+            readonly property int maxRows: 5
+
+            visible: rows.length > 0
             title: Tr.tr("Transfers")
             icon: "swap_vert"
 
@@ -536,18 +554,42 @@ Item {
                 onClicked: AirDrop.openDir()
             }
 
-            Repeater {
-                model: AirDrop.sends
+            ListView {
+                id: transferList
 
-                RowLayout {
+                Layout.fillWidth: true
+                implicitHeight: Math.min(count, transfersCard.maxRows) * (transfersCard.rowHeight + spacing) - spacing
+                spacing: Tokens.spacing.small
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: transfersCard.rows
+
+                StyledScrollBar.vertical: StyledScrollBar {
+                    flickable: transferList
+                }
+
+                delegate: RowLayout {
+                    id: transferRow
+
                     required property var modelData
+                    readonly property bool isSend: modelData.row === "send"
+                    readonly property bool isImage: !isSend && modelData.kind === "file" && AirDrop.imageMime(modelData.path) !== ""
 
-                    Layout.fillWidth: true
+                    width: ListView.view.width
+                    height: transfersCard.rowHeight
                     spacing: Tokens.spacing.medium
 
                     MaterialIcon {
-                        text: modelData.state === "delivered" ? "check_circle" : modelData.state === "declined" ? "block" : modelData.state === "failed" ? "error" : "upload"
-                        color: modelData.state === "delivered" ? Colours.palette.m3primary : modelData.state === "failed" || modelData.state === "declined" ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+                        text: {
+                            if (transferRow.isSend)
+                                return modelData.state === "delivered" ? "check_circle" : modelData.state === "declined" ? "block" : modelData.state === "failed" ? "error" : "upload";
+                            return modelData.kind === "url" ? "link" : transferRow.isImage ? "image" : "download_done";
+                        }
+                        color: {
+                            if (!transferRow.isSend || modelData.state === "delivered")
+                                return Colours.palette.m3primary;
+                            return modelData.state === "failed" || modelData.state === "declined" ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant;
+                        }
                     }
 
                     Column {
@@ -555,13 +597,15 @@ Item {
 
                         StyledText {
                             width: parent.width
-                            text: Tr.tr("%1 → %2").arg(modelData.files.map(f => AirDrop.fileName(f)).join(", ")).arg(modelData.target)
+                            text: transferRow.isSend ? Tr.tr("%1 → %2").arg(modelData.files.map(f => AirDrop.fileName(f)).join(", ")).arg(modelData.target) : modelData.name
                             elide: Text.ElideMiddle
                             color: Colours.palette.m3onSurface
                         }
 
                         StyledText {
                             text: {
+                                if (!transferRow.isSend)
+                                    return Tr.formatDateTime(modelData.time, "hh:mm");
                                 switch (modelData.state) {
                                 case "looking":
                                     return Tr.tr("Looking for the receiver…");
@@ -581,45 +625,21 @@ Item {
                     }
 
                     StyledProgressBar {
-                        visible: modelData.state === "sending" && modelData.total > 0
+                        visible: transferRow.isSend && modelData.state === "sending" && modelData.total > 0
                         Layout.preferredWidth: 120
                         value: modelData.total > 0 ? modelData.sent / modelData.total : 0
                     }
-                }
-            }
 
-            Repeater {
-                model: AirDrop.received
-
-                RowLayout {
-                    required property var modelData
-
-                    Layout.fillWidth: true
-                    spacing: Tokens.spacing.medium
-
-                    MaterialIcon {
-                        text: modelData.kind === "url" ? "link" : "download_done"
-                        color: Colours.palette.m3primary
-                    }
-
-                    Column {
-                        Layout.fillWidth: true
-
-                        StyledText {
-                            width: parent.width
-                            text: modelData.name
-                            elide: Text.ElideMiddle
-                            color: Colours.palette.m3onSurface
-                        }
-
-                        StyledText {
-                            text: Tr.formatDateTime(modelData.time, "hh:mm")
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3onSurfaceVariant
-                        }
+                    // Copy: the link, the picture itself, or the file's path
+                    IconButton {
+                        visible: !transferRow.isSend
+                        icon: "content_copy"
+                        type: IconButton.Text
+                        onClicked: AirDrop.copy(modelData)
                     }
 
                     IconButton {
+                        visible: !transferRow.isSend
                         icon: "open_in_new"
                         type: IconButton.Text
                         onClicked: AirDrop.openPath(modelData.path)

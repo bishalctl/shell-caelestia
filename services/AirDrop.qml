@@ -213,6 +213,43 @@ Singleton {
         Quickshell.execDetached([...GlobalConfig.launcher.launchPrefix, "xdg-open", dir]);
     }
 
+    // Image files whose mime type the clipboard understands: pasting them gives the picture
+    readonly property var imageMimes: ({
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        bmp: "image/bmp",
+        svg: "image/svg+xml",
+        tif: "image/tiff",
+        tiff: "image/tiff",
+        avif: "image/avif",
+        heic: "image/heic"
+    })
+
+    function imageMime(path: string): string {
+        const i = path.lastIndexOf(".");
+        return i >= 0 ? (imageMimes[path.slice(i + 1).toLowerCase()] ?? "") : "";
+    }
+
+    // Copy a received item: a link as text, an image as the picture itself, anything else as its path
+    function copy(entry: var): void {
+        if (entry.kind === "url") {
+            Quickshell.execDetached(["wl-copy", "--", entry.path]);
+            Toaster.toast(Tr.tr("Link copied"), entry.path, "content_copy");
+            return;
+        }
+        const mime = imageMime(entry.path);
+        if (mime) {
+            Quickshell.execDetached(["sh", "-c", 'exec wl-copy --type "$1" < "$2"', "wl-copy", mime, entry.path]);
+            Toaster.toast(Tr.tr("Image copied"), fileName(entry.path), "content_copy");
+        } else {
+            Quickshell.execDetached(["wl-copy", "--", entry.path]);
+            Toaster.toast(Tr.tr("Path copied"), entry.path, "content_copy");
+        }
+    }
+
     function formatRemaining(seconds: int): string {
         if (seconds < 0)
             return Tr.tr("until turned off");
@@ -363,6 +400,7 @@ Singleton {
                 const l = line.trim();
                 if (!l)
                     return;
+                root.pending = null; // whatever was incoming has now landed
                 if (l.startsWith("\"")) {
                     const url = root.unquote(l);
                     root.received = [{
@@ -392,16 +430,24 @@ Singleton {
                     return;
                 let m;
                 if ((m = /^(".*") \((".*")\) wants to send:$/.exec(l))) {
+                    // With --accept the receiver has already said yes: show it as an incoming
+                    // transfer, with no buttons or countdown, until the file lands.
+                    const auto = root.autoAccept;
                     root.pending = {
                         sender: root.unquote(m[1]),
                         model: root.unquote(m[2]),
                         items: [],
-                        urls: []
+                        urls: [],
+                        auto
                     };
                     root.pendingRemaining = 15;
-                    pendingCountdown.restart();
+                    if (!auto)
+                        pendingCountdown.restart();
                     root.pushLog(Tr.tr("%1 wants to send").arg(root.pending.sender));
-                    Toaster.toast(Tr.tr("AirDrop from %1").arg(root.pending.sender), Tr.tr("Open the dashboard to accept"), "ios_share");
+                    if (auto)
+                        Toaster.toast(Tr.tr("AirDrop from %1").arg(root.pending.sender), Tr.tr("Receiving…"), "ios_share");
+                    else
+                        Toaster.toast(Tr.tr("AirDrop from %1").arg(root.pending.sender), Tr.tr("Open the dashboard to accept"), "ios_share");
                 } else if (root.pending && (m = /^ {2}(".*") (\S+) ?(\d+ bytes)?$/.exec(l))) {
                     const p = Object.assign({}, root.pending);
                     p.items = [...p.items, {
@@ -582,7 +628,7 @@ Singleton {
 
         interval: 1000
         repeat: true
-        running: root.pending !== null
+        running: root.pending !== null && !root.pending.auto
         onTriggered: {
             if (root.pendingRemaining > 0)
                 root.pendingRemaining -= 1;

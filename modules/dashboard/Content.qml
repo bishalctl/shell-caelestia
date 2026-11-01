@@ -44,6 +44,7 @@ Item {
             {
                 component: airdropComponent,
                 iconName: "ios_share",
+                iconSource: "airdrop",
                 text: "AirDrop",
                 enabled: Config.dashboard.showAirDrop
             }
