@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
+import Caelestia.Config
 import qs.modules.ephemera.port.Common
 import qs.modules.ephemera.port.Widgets
 import "../lib/Markdown.js" as Markdown
@@ -490,7 +491,7 @@ Item {
                 onLinkActivated: link => {
                     // Only allow http/https — security fix
                     if (/^https?:\/\//i.test(link))
-                        Qt.openUrlExternally(link);
+                        Quickshell.execDetached([...GlobalConfig.launcher.launchPrefix, "xdg-open", link]);
                 }
 
                 hoverEnabled: true

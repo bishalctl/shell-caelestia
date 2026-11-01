@@ -471,7 +471,8 @@ StyledRect {
                     if (!root.expanded)
                         return;
 
-                    Qt.openUrlExternally(link);
+                    // Own unit via launchPrefix so the opened app outlives the shell
+                    Quickshell.execDetached([...GlobalConfig.launcher.launchPrefix, "xdg-open", link]);
                     root.modelData.popup = false;
                 }
 

@@ -144,7 +144,7 @@ class LauncherConfig : public settings::ObjectNode {
         }))
     // Prepended to every launched command (apps, actions, browsers), e.g. ["app2unit", "--"]
     // so launched apps get their own transient unit and outlive the shell's cgroup.
-    CONFIG_GLOBAL_PROPERTY(QStringList, launchPrefix, {})
+    CONFIG_GLOBAL_PROPERTY(QStringList, launchPrefix, (QStringList{ u"app2unit"_s, u"--"_s }))
 };
 
 } // namespace caelestia::shell::config
