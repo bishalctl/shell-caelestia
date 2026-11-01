@@ -438,13 +438,14 @@ Item {
 
             attachTo: ds
             hoverPassthrough: true
-            // Fly out beside the popout: left edge of the menu at the popout's right edge,
-            // top aligned with this row.
+            flushLeft: true
+            // Fly out beside the popout: the menu's left edge sits on the popout's right edge
+            // (overlapping by a pixel so no seam shows), top aligned with this row.
             attachSideX: Menu.Right
             thisSideX: Menu.Left
             attachSideY: Menu.Top
             thisSideY: Menu.Top
-            marginX: root.width - ds.mapToItem(root, ds.width, 0).x + Tokens.padding.large + Tokens.spacing.small
+            marginX: root.width - ds.mapToItem(root, ds.width, 0).x + Tokens.padding.large - 1
             items: dsItems.instances
             onItemSelected: item => ds.selected(item.value)
             // Keep the popout alive while the cursor is over the flyout

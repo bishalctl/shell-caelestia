@@ -36,6 +36,8 @@ MouseArea {
     // Don't take hover for the full-window overlay (lets hover-driven hosts, e.g. bar popouts,
     // keep seeing the cursor while the menu is open).
     property bool hoverPassthrough
+    // Square the left corners so the menu reads as an extension of the surface it flies out of.
+    property bool flushLeft
 
     signal itemSelected(item: MenuItem)
 
@@ -114,6 +116,8 @@ MouseArea {
         StyledRect {
             anchors.fill: parent
             radius: parent.radius
+            topLeftRadius: root.flushLeft ? 0 : radius
+            bottomLeftRadius: root.flushLeft ? 0 : radius
             color: Colours.palette.m3surfaceContainerLow
 
             ColumnLayout {
