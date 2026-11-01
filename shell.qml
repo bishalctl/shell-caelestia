@@ -37,6 +37,11 @@ ShellRoot {
         AudioDevices;
         VirtualSink;
         AudioPersist;
+
+        // AirDrop: register its IPC target (airdrop on/off/toggle/status) and settings at boot,
+        // not on the first open of its dashboard tab
+        if (GlobalConfig.dashboard.showAirDrop)
+            AirDrop;
     }
 
     FontLoader {
