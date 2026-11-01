@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import Quickshell
 import Caelestia
@@ -71,7 +72,9 @@ MouseArea {
             let off = root.attachSideX === Menu.Left ? 0 : item.width;
             if (root.thisSideX === Menu.Right)
                 off -= width;
-            return item.mapToItem(root.parent, off, 0).x + root.marginX;
+            const x = item.mapToItem(root.parent, off, 0).x + root.marginX;
+            // Keep the menu on screen (long entries would otherwise run past the window edge)
+            return Math.max(0, Math.min(x, root.parent.width - width));
         }
         y: {
             CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
@@ -79,7 +82,8 @@ MouseArea {
             let off = root.attachSideY === Menu.Top ? 0 : item.height;
             if (root.thisSideY === Menu.Bottom)
                 off -= height;
-            return item.mapToItem(root.parent, 0, off).y + root.marginY;
+            const y = item.mapToItem(root.parent, 0, off).y + root.marginY;
+            return Math.max(0, Math.min(y, root.parent.height - height));
         }
 
         radius: Tokens.rounding.large
@@ -188,9 +192,44 @@ MouseArea {
                                 active: (item.modelData?.trailingIcon?.length ?? 0) > 0
                                 visible: active
 
-                                sourceComponent: MaterialIcon {
+                                sourceComponent: item.modelData?.trailingClickable ? trailingButton : trailingIcon
+                            }
+
+                            Component {
+                                id: trailingIcon
+
+                                MaterialIcon {
                                     text: item.modelData?.trailingIcon ?? ""
                                     color: item.active ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+
+                            Component {
+                                id: trailingButton
+
+                                StyledRect {
+                                    implicitWidth: implicitHeight
+                                    implicitHeight: trailingBtnIcon.implicitHeight + Tokens.padding.small * 2
+                                    radius: Tokens.rounding.full
+                                    color: item.modelData?.trailingActive ? Colours.palette.m3errorContainer : "transparent"
+
+                                    QQC.ToolTip.visible: trailingBtnLayer.containsMouse && (item.modelData?.trailingTooltip?.length ?? 0) > 0
+                                    QQC.ToolTip.text: item.modelData?.trailingTooltip ?? ""
+
+                                    StateLayer {
+                                        id: trailingBtnLayer
+
+                                        disabled: !root.expanded
+                                        onClicked: item.modelData?.trailingClicked()
+                                    }
+
+                                    MaterialIcon {
+                                        id: trailingBtnIcon
+
+                                        anchors.centerIn: parent
+                                        text: item.modelData?.trailingIcon ?? ""
+                                        color: item.modelData?.trailingActive ? Colours.palette.m3onErrorContainer : item.active ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                                    }
                                 }
                             }
                         }
