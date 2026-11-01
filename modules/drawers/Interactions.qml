@@ -34,6 +34,17 @@ CustomMouseArea {
         return x >= panelX - Config.border.rounding && x <= panelX + panel.width + Config.border.rounding;
     }
 
+    // A popout's registered flyout (e.g. the audio device menu beside it) counts as part of it.
+    function inFlyout(x: real, y: real): bool {
+        const f = popouts.flyout;
+        if (!f || !f.visible)
+            return false;
+        const p = f.mapToItem(root, 0, 0);
+        // Include the gap between the popout and the flyout so crossing it doesn't close the popout
+        const slack = Tokens.padding.large * 3;
+        return x >= p.x - slack && x <= p.x + f.width && y >= p.y - slack && y <= p.y + f.height + slack;
+    }
+
     function inLeftPanel(panel: Item, x: real, y: real): bool {
         return x < bar.implicitWidth + panel.x + panel.width && withinPanelHeight(panel, x, y);
     }
@@ -244,7 +255,7 @@ CustomMouseArea {
         // Show popouts on hover
         if (x < bar.implicitWidth) {
             bar.checkPopout(y);
-        } else if ((!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) && popouts.currentName !== "ephemera" && !inLeftPanel(panels.popoutsWrapper, x, y)) {
+        } else if ((!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) && popouts.currentName !== "ephemera" && !inLeftPanel(panels.popoutsWrapper, x, y) && !inFlyout(x, y)) {
             popouts.hasCurrent = false;
             bar.closeTray();
         }

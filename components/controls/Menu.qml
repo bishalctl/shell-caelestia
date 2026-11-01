@@ -29,9 +29,13 @@ MouseArea {
     property real marginX
     property real marginY
 
+    readonly property alias panel: menu
     property list<MenuItem> items
     property MenuItem active: items[0] ?? null
     property bool expanded
+    // Don't take hover for the full-window overlay (lets hover-driven hosts, e.g. bar popouts,
+    // keep seeing the cursor while the menu is open).
+    property bool hoverPassthrough
 
     signal itemSelected(item: MenuItem)
 
@@ -43,7 +47,7 @@ MouseArea {
     anchors.fill: parent
 
     enabled: expanded
-    hoverEnabled: expanded
+    hoverEnabled: expanded && !hoverPassthrough
     cursorShape: expanded ? Qt.ArrowCursor : undefined
     onClicked: expanded = false
 
@@ -103,7 +107,7 @@ MouseArea {
 
         MouseArea {
             anchors.fill: parent
-            hoverEnabled: true
+            hoverEnabled: !root.hoverPassthrough
             onWheel: e => e.accepted = true
         }
 

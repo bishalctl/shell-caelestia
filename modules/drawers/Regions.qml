@@ -72,6 +72,19 @@ Region {
         width: panel.width * (1 - root.panels.popoutsWrapper.offsetScale)
     }
 
+    // A popout's flyout (e.g. the audio device menu beside it) lives outside the popout
+    // wrapper, so it needs its own input region, plus the gap back to the popout.
+    Region {
+        readonly property Item flyout: root.panels.popouts.flyout
+        readonly property real slack: root.win.contentItem.Tokens.padding.large * 3
+
+        x: flyout ? flyout.x - slack : 0
+        y: flyout ? flyout.y - slack : 0
+        width: flyout ? flyout.width + slack : 0
+        height: flyout ? flyout.height + slack * 2 : 0
+        intersection: Intersection.Subtract
+    }
+
     component R: Region {
         required property Item panel
 
