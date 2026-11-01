@@ -43,6 +43,8 @@ Singleton {
     readonly property bool active: radioState !== "idle"
     property string linkAddress
     property string lastError
+    // Set when a setting the receiver was started with changed: bring it back once it exits
+    property bool receiverRestartWanted: false
     // Seconds left in the visibility window (-1 = no limit / not visible)
     property int remaining: -1
 
@@ -118,6 +120,8 @@ Singleton {
         countdown.stop();
         remaining = -1;
         pending = null;
+        receiverRestart.stop();
+        receiverRestartWanted = false;
         if (receiver.running)
             receiver.signal(2); // SIGINT: the receiver's own clean exit
         if (radio.running) {
@@ -427,7 +431,31 @@ Singleton {
         }
         onExited: (code, status) => {
             root.pending = null;
+            if (root.receiverRestartWanted) {
+                root.receiverRestartWanted = false;
+                if (root.radioState === "up")
+                    root.startReceiver();
+            }
         }
+    }
+
+    // The receiver only reads its name, folder and --accept at start: restart it when they
+    // change while it runs, debounced so typing a new name doesn't restart it per keystroke.
+    Timer {
+        id: receiverRestart
+
+        interval: 800
+        onTriggered: {
+            if (!receiver.running || root.radioState !== "up")
+                return;
+            root.receiverRestartWanted = true;
+            receiver.signal(2);
+        }
+    }
+
+    function restartReceiverIfRunning(): void {
+        if (settingsLoaded && receiver.running)
+            receiverRestart.restart();
     }
 
     // `owly browse`: who answers /Discover on the link
@@ -563,10 +591,19 @@ Singleton {
         }
     }
 
-    onNameChanged: saveSettings()
-    onDirChanged: saveSettings()
+    onNameChanged: {
+        saveSettings();
+        restartReceiverIfRunning();
+    }
+    onDirChanged: {
+        saveSettings();
+        restartReceiverIfRunning();
+    }
     onWindowMinutesChanged: saveSettings()
-    onAutoAcceptChanged: saveSettings()
+    onAutoAcceptChanged: {
+        saveSettings();
+        restartReceiverIfRunning();
+    }
 
     IpcHandler {
         function toggle(): void {
