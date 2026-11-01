@@ -7,7 +7,6 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.components.controls
-import qs.components.filedialog
 import qs.services
 import qs.utils
 
@@ -51,15 +50,6 @@ Item {
     Component.onCompleted: {
         if (!AirDrop.checked && !AirDrop.checking)
             AirDrop.check();
-    }
-
-    FileDialog {
-        id: sendPicker
-
-        property string target
-
-        title: Tr.tr("Send a file over AirDrop")
-        onAccepted: path => AirDrop.send(target, [path])
     }
 
     ColumnLayout {
@@ -459,72 +449,192 @@ Item {
             }
         }
 
-        // ---- nearby devices / send ----------------------------------------------------------
+        // ---- send: compose box + device picker --------------------------------------------
         Card {
-            title: Tr.tr("Nearby devices")
-            icon: "devices"
+            id: sendCard
 
-            headerItem: RowLayout {
+            title: Tr.tr("Send")
+            icon: "ios_share"
+
+            headerItem: TextButton {
+                visible: AirDrop.picking
+                text: Tr.tr("Cancel")
+                type: ButtonBase.Text
+                onClicked: AirDrop.stopPicking()
+            }
+
+            // Staged files, one chip each
+            Flow {
+                visible: AirDrop.draftFiles.length > 0
+                Layout.fillWidth: true
                 spacing: Tokens.spacing.small
 
-                CircularIndicator {
-                    visible: AirDrop.browsing
-                    implicitSize: 20
-                    running: AirDrop.browsing
-                }
+                Repeater {
+                    model: AirDrop.draftFiles
 
-                TextButton {
-                    text: AirDrop.browsing ? Tr.tr("Scanning…") : Tr.tr("Scan")
-                    type: ButtonBase.Tonal
-                    disabled: AirDrop.browsing || !AirDrop.ready
-                    onClicked: AirDrop.browse()
+                    StyledRect {
+                        id: chip
+
+                        required property string modelData
+
+                        implicitWidth: chipRow.implicitWidth + Tokens.padding.medium * 2
+                        implicitHeight: chipRow.implicitHeight + Tokens.padding.small * 2
+                        radius: Tokens.rounding.full
+                        color: Colours.palette.m3secondaryContainer
+
+                        RowLayout {
+                            id: chipRow
+
+                            anchors.centerIn: parent
+                            spacing: Tokens.spacing.small
+
+                            MaterialIcon {
+                                text: AirDrop.imageMime(chip.modelData) ? "image" : "draft"
+                                color: Colours.palette.m3onSecondaryContainer
+                            }
+
+                            StyledText {
+                                Layout.maximumWidth: 240
+                                text: AirDrop.fileName(chip.modelData)
+                                elide: Text.ElideMiddle
+                                color: Colours.palette.m3onSecondaryContainer
+                            }
+
+                            IconButton {
+                                icon: "close"
+                                type: IconButton.Text
+                                font: Tokens.font.icon.small
+                                padding: 0
+                                onClicked: AirDrop.unstageFile(chip.modelData)
+                            }
+                        }
+                    }
                 }
             }
 
-            StyledText {
-                visible: AirDrop.peers.length === 0
+            // Compose row: attach, text, send
+            RowLayout {
                 Layout.fillWidth: true
-                text: AirDrop.browsing ? Tr.tr("Looking for receivers…") : AirDrop.radioState === "up" ? Tr.tr("No one answered yet. iPhones listen in bursts: open the share sheet on the phone, then scan again.") : Tr.tr("Scanning turns the radio on. Devices show up here when they answer.")
-                font: Tokens.font.body.small
-                color: Colours.palette.m3onSurfaceVariant
-                wrapMode: Text.WordWrap
-            }
+                spacing: Tokens.spacing.small
 
-            Repeater {
-                model: AirDrop.peers
+                IconButton {
+                    icon: "attach_file"
+                    type: IconButton.Tonal
+                    disabled: !AirDrop.installed
+                    onClicked: AirDrop.pickFiles(root.Window.window)
+                }
 
-                RowLayout {
-                    required property var modelData
+                StyledTextField {
+                    id: composeField
 
                     Layout.fillWidth: true
-                    spacing: Tokens.spacing.medium
+                    placeholderText: AirDrop.draftFiles.length > 0 ? Tr.tr("Add a note (optional)") : Tr.tr("Paste a link or write a note…")
+                    text: AirDrop.draftText
+                    onTextEdited: AirDrop.draftText = text
+                    onAccepted: AirDrop.startPicking()
+                }
 
-                    MaterialIcon {
-                        text: /iphone|ipad/i.test(modelData.name) ? "smartphone" : "laptop_mac"
-                        color: Colours.palette.m3primary
+                // The share button: iOS-style share glyph, filled while there is something to send
+                ButtonBase {
+                    id: shareButton
+
+                    type: ButtonBase.Filled
+                    disabled: !AirDrop.hasDraft || !AirDrop.installed
+                    isRound: true
+                    padding: Tokens.padding.small
+                    implicitWidth: implicitHeight
+                    implicitHeight: shareIcon.implicitHeight + padding * 2
+                    activeColour: Colours.palette.m3primary
+                    inactiveColour: Colours.palette.m3primary
+                    activeOnColour: Colours.palette.m3onPrimary
+                    inactiveOnColour: Colours.palette.m3onPrimary
+                    onClicked: AirDrop.startPicking()
+
+                    SvgIcon {
+                        id: shareIcon
+
+                        anchors.centerIn: parent
+                        name: "share-ios"
+                        fontStyle: Tokens.font.icon.medium
+                        color: shareButton.onColour
+                    }
+                }
+            }
+
+            // Device picker: who answers, as circles with names, like the share sheet
+            ColumnLayout {
+                visible: AirDrop.picking
+                Layout.fillWidth: true
+                Layout.topMargin: Tokens.spacing.small
+                spacing: Tokens.spacing.small
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.small
+
+                    CircularIndicator {
+                        implicitSize: 18
+                        running: AirDrop.picking
                     }
 
-                    Column {
+                    StyledText {
                         Layout.fillWidth: true
-
-                        StyledText {
-                            text: modelData.name
-                            color: Colours.palette.m3onSurface
+                        text: {
+                            if (AirDrop.radioState !== "up")
+                                return Tr.tr("Bringing the radio up…");
+                            return AirDrop.peers.length > 0 ? Tr.tr("Tap a device to send") : Tr.tr("Looking for devices nearby… wake the iPhone or open its share sheet so it answers.");
                         }
-
-                        StyledText {
-                            text: modelData.instance
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3onSurfaceVariant
-                        }
+                        font: Tokens.font.body.small
+                        color: Colours.palette.m3onSurfaceVariant
+                        wrapMode: Text.WordWrap
                     }
+                }
 
-                    IconTextButton {
-                        icon: "upload"
-                        text: Tr.tr("Send file")
-                        onClicked: {
-                            sendPicker.target = modelData.name;
-                            sendPicker.open();
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.large
+
+                    Repeater {
+                        model: AirDrop.peers
+
+                        Column {
+                            id: device
+
+                            required property var modelData
+
+                            width: 112
+                            spacing: Tokens.spacing.small
+
+                            StyledRect {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                implicitWidth: 60
+                                implicitHeight: 60
+                                radius: Tokens.rounding.full
+                                color: Colours.palette.m3primaryContainer
+
+                                StateLayer {
+                                    radius: parent.radius
+                                    onClicked: AirDrop.sendDraft(device.modelData.name)
+                                }
+
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    text: /iphone/i.test(device.modelData.name) ? "smartphone" : /ipad/i.test(device.modelData.name) ? "tablet_mac" : "laptop_mac"
+                                    color: Colours.palette.m3onPrimaryContainer
+                                    fontStyle: Tokens.font.icon.large
+                                }
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                text: device.modelData.name
+                                font: Tokens.font.label.medium
+                                color: Colours.palette.m3onSurface
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }
@@ -597,7 +707,7 @@ Item {
 
                         StyledText {
                             width: parent.width
-                            text: transferRow.isSend ? Tr.tr("%1 → %2").arg(modelData.files.map(f => AirDrop.fileName(f)).join(", ")).arg(modelData.target) : modelData.name
+                            text: transferRow.isSend ? Tr.tr("%1 → %2").arg(modelData.label ?? modelData.files.map(f => AirDrop.fileName(f)).join(", ")).arg(modelData.target) : modelData.name
                             elide: Text.ElideMiddle
                             color: Colours.palette.m3onSurface
                         }

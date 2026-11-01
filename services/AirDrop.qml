@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import QtQuick.Dialogs as Native
 import Quickshell
 import Quickshell.Io
 import Caelestia
@@ -64,10 +65,21 @@ Singleton {
     property list<var> peers: []
     readonly property bool browsing: browser.running
 
+    // --- composing a send -------------------------------------------------------------------
+    // What the compose box holds: a note or link, plus files staged from the picker or from
+    // "Send via AirDrop" in a file manager. Hitting send shows the device picker (`picking`),
+    // which keeps browsing until a device is chosen or the picker is dismissed.
+    property string draftText
+    property list<string> draftFiles: []
+    readonly property bool hasDraft: draftText.trim() !== "" || draftFiles.length > 0
+    property bool picking: false
+
     // Recent log lines for the details view
     property list<string> log: []
 
     signal fileReceived(path: string)
+    // Something was staged from outside (file manager, IPC): the dashboard should show this tab
+    signal composeRequested
 
     function pushLog(line: string): void {
         if (!line)
@@ -175,20 +187,52 @@ Singleton {
                 turnOn();
             return;
         }
-        peers = [];
+        if (!picking)
+            peers = [];
         browser.running = true;
     }
 
     property bool browseWhenUp: false
 
+    // Send files to a receiver by name
     function send(target: string, files: list<string>): void {
         if (!files.length)
             return;
+        sendPayload(target, {
+            files,
+            label: files.map(f => fileName(f)).join(", ")
+        }, ["owly", "send", "--to", target, "--name", name, ...files]);
+    }
+
+    // Send a link: AirDrop carries URLs as their own item type, the phone opens them directly
+    function sendUrl(target: string, url: string): void {
+        sendPayload(target, {
+            files: [],
+            label: url
+        }, ["owly", "send", "--to", target, "--name", name, "--url", url]);
+    }
+
+    // Send a note (and optionally files with it). AirDrop has no plain-text item owly can
+    // send, so the note travels as a small text file written just before the send starts.
+    function sendText(target: string, text: string, files: list<string>): void {
+        const stamp = Tr.formatDateTime(new Date(), "yyyy-MM-dd HH.mm.ss");
+        const note = `${Paths.cache}/airdrop/Note ${stamp}.txt`;
+        const first = text.split("\n")[0];
+        sendPayload(target, {
+            files: [...files, note],
+            label: [...files.map(f => fileName(f)), first.length > 40 ? `${first.slice(0, 40)}…` : first].join(", ")
+        }, ["sh", "-c", 'mkdir -p "$(dirname "$1")" && printf \'%s\\n\' "$AIRDROP_NOTE" > "$1" && shift && exec owly send "$@"', "sh", note, "--to", target, "--name", name, ...files, note], {
+            AIRDROP_NOTE: text
+        });
+    }
+
+    function sendPayload(target: string, payload: var, command: list<string>, env: var): void {
         const id = Date.now();
         sends = [{
             id,
             target,
-            files,
+            files: payload.files,
+            label: payload.label,
             state: "looking",
             detail: "",
             sent: 0,
@@ -196,9 +240,92 @@ Singleton {
         }, ...sends].slice(0, 10);
         const proc = sendComponent.createObject(root, {
             sendId: id,
-            command: ["owly", "send", "--to", target, "--name", name, ...files]
+            command,
+            environment: env ?? ({})
         });
         proc.running = true;
+    }
+
+    // --- compose box ------------------------------------------------------------------------
+    function stageFiles(files: list<string>): void {
+        const next = [...draftFiles];
+        for (const f of files)
+            if (f && !next.includes(f))
+                next.push(f);
+        draftFiles = next;
+    }
+
+    function unstageFile(path: string): void {
+        draftFiles = draftFiles.filter(f => f !== path);
+        if (!hasDraft)
+            picking = false;
+    }
+
+    function clearDraft(): void {
+        draftText = "";
+        draftFiles = [];
+        picking = false;
+    }
+
+    function isUrl(text: string): bool {
+        return /^(https?|ftp|mailto|file|tel|sms):/i.test(text) || /^www\.[^\s]+$/i.test(text);
+    }
+
+    // Send pressed: show the device picker and keep looking for receivers while it's up
+    function startPicking(): void {
+        if (!hasDraft || !installed)
+            return;
+        picking = true;
+        browse();
+    }
+
+    function stopPicking(): void {
+        picking = false;
+    }
+
+    // A device was chosen in the picker: send the draft to it
+    function sendDraft(target: string): void {
+        const text = draftText.trim();
+        const files = [...draftFiles];
+        if (!files.length && text && isUrl(text))
+            sendUrl(target, text);
+        else if (text)
+            sendText(target, text, files);
+        else if (files.length)
+            send(target, files);
+        clearDraft();
+    }
+
+    // "Send via AirDrop" from a file manager or the CLI: stage the files, open the tab, pick
+    function shareFiles(files: list<string>): void {
+        stageFiles(files.map(f => f.startsWith("file://") ? decodeURIComponent(f.slice(7)) : f));
+        showTab();
+        if (hasDraft)
+            startPicking();
+    }
+
+    function shareText(text: string): void {
+        if (!text.trim())
+            return;
+        draftText = text;
+        showTab();
+        startPicking();
+    }
+
+    // Open the file chooser for the compose box. It lives here, not in the tab: the dashboard
+    // unloads when it loses focus to the dialog, which would take the dialog's handlers with it.
+    function pickFiles(win: var): void {
+        // The dialog needs a window to attach to; the drawers window outlives the tab
+        if (win)
+            filePicker.parentWindow = win;
+        filePicker.open();
+    }
+
+    function showTab(): void {
+        const s = ShellState.forActive();
+        if (s)
+            s.dashboard = true;
+        composeRequested();
     }
 
     function updateSend(id: int, patch: var): void {
@@ -280,6 +407,20 @@ Singleton {
             receiver.signal(2);
         if (radio.running)
             radio.signal(2);
+    }
+
+    Native.FileDialog {
+        id: filePicker
+
+        title: Tr.tr("Send via AirDrop")
+        fileMode: Native.FileDialog.OpenFiles
+        onAccepted: {
+            const files = [];
+            for (let i = 0; i < selectedFiles.length; i++)
+                files.push(decodeURIComponent(selectedFiles[i].toString().replace(/^file:\/\//, "")));
+            root.stageFiles(files);
+            root.showTab(); // the dashboard closed when the dialog took focus
+        }
     }
 
     FileView {
@@ -381,6 +522,7 @@ Singleton {
             countdown.stop();
             root.remaining = -1;
             root.browseWhenUp = false;
+            root.picking = false;
             if (receiver.running)
                 receiver.signal(2);
             if (code === 3 && !root.lastError)
@@ -530,6 +672,21 @@ Singleton {
                     root.pushLog(line.trim());
             }
         }
+        onExited: {
+            if (root.picking)
+                rebrowse.restart();
+        }
+    }
+
+    // While the device picker is up, scan again as soon as the last scan ends
+    Timer {
+        id: rebrowse
+
+        interval: 500
+        onTriggered: {
+            if (root.picking && root.radioState === "up" && !browser.running)
+                root.browse();
+        }
     }
 
     Component {
@@ -666,6 +823,17 @@ Singleton {
 
         function status(): string {
             return root.radioState + (root.receiving ? " receiving" : "");
+        }
+
+        // Stage files for sending and open the AirDrop tab with the device picker.
+        // Paths are separated by newlines; file:// URLs are accepted too.
+        function share(paths: string): void {
+            root.shareFiles(paths.split("\n").map(p => p.trim()).filter(p => p));
+        }
+
+        // Stage a note or link for sending and open the AirDrop tab with the device picker
+        function shareText(text: string): void {
+            root.shareText(text);
         }
 
         target: "airdrop"

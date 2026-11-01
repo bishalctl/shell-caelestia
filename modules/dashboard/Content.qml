@@ -8,6 +8,7 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.components.filedialog
+import qs.services
 
 Item {
     id: root
@@ -50,6 +51,17 @@ Item {
             }
         ];
         return allTabs.filter(tab => tab.enabled);
+    }
+
+    // "Send via AirDrop" from outside: bring the AirDrop tab forward
+    Connections {
+        target: AirDrop
+
+        function onComposeRequested(): void {
+            const i = root.dashboardTabs.findIndex(t => t.component === airdropComponent);
+            if (i >= 0)
+                root.screenState.dashboardTab = i;
+        }
     }
 
     readonly property real nonAnimWidth: view.implicitWidth + viewWrapper.anchors.margins * 2
