@@ -34,6 +34,8 @@ class DashboardConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, showMedia, true)
     CONFIG_PROPERTY(bool, showPerformance, true)
     CONFIG_PROPERTY(bool, showWeather, true)
+    // Personal fork: AirDrop tab (Owly-backed), beside Weather
+    CONFIG_PROPERTY(bool, showAirDrop, true)
     CONFIG_PROPERTY(bool, showClockSeconds, false)
     CONFIG_GLOBAL_PROPERTY(int, mediaUpdateInterval, 500)
     CONFIG_GLOBAL_PROPERTY(int, resourceUpdateInterval, 2000)

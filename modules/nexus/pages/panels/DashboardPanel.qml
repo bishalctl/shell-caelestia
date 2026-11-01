@@ -71,10 +71,17 @@ PageBase {
         }
 
         ToggleRow {
-            last: true
             text: Tr.tr("Weather")
             checked: Config.dashboard.showWeather
             onToggled: GlobalConfig.dashboard.showWeather = checked
+        }
+
+        ToggleRow {
+            last: true
+            text: "AirDrop"
+            subtext: Tr.tr("Send and receive with nearby Apple devices (needs Owly)")
+            checked: Config.dashboard.showAirDrop
+            onToggled: GlobalConfig.dashboard.showAirDrop = checked
         }
 
         // Performance widgets

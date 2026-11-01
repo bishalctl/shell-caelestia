@@ -40,6 +40,12 @@ Item {
                 iconName: "cloud",
                 text: Tr.tr("Weather"),
                 enabled: Config.dashboard.showWeather
+            },
+            {
+                component: airdropComponent,
+                iconName: "ios_share",
+                text: "AirDrop",
+                enabled: Config.dashboard.showAirDrop
             }
         ];
         return allTabs.filter(tab => tab.enabled);
@@ -179,6 +185,12 @@ Item {
                 id: weatherComponent
 
                 WeatherTab {}
+            }
+
+            Component {
+                id: airdropComponent
+
+                AirDropTab {}
             }
 
             Behavior on contentX {
