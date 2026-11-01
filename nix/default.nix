@@ -7,6 +7,7 @@
   fish,
   ddcutil,
   brightnessctl,
+  app2unit,
   networkmanager,
   lm_sensors,
   swappy,
@@ -48,6 +49,7 @@
       fish
       ddcutil
       brightnessctl
+      app2unit # Dictation.qml drives Wispr Flow deeplinks through it
       networkmanager
       lm_sensors
       swappy
