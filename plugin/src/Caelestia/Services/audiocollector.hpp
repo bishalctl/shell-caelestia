@@ -44,6 +44,9 @@ private:
 
 class AudioCollector;
 
+// What the collector taps: the default sink's monitor (what is playing) or the default source (microphone).
+enum class CaptureKind : quint8 { Sink, Source };
+
 class PipeWireWorker {
 public:
     explicit PipeWireWorker(std::stop_token token, AudioCollector* collector);
@@ -71,7 +74,9 @@ public:
     AudioCollector(const AudioCollector&) = delete;
     AudioCollector& operator=(const AudioCollector&) = delete;
 
-    static AudioCollector& instance();
+    static AudioCollector& instance(CaptureKind kind = CaptureKind::Sink);
+
+    [[nodiscard]] CaptureKind kind() const;
 
     void clearBuffer();
     void loadChunk(const qint16* samples, quint32 count);
@@ -79,9 +84,10 @@ public:
     quint32 readChunk(double* out, quint32 count = 0);
 
 private:
-    explicit AudioCollector(QObject* parent = nullptr);
+    explicit AudioCollector(CaptureKind kind, QObject* parent = nullptr);
     ~AudioCollector() override;
 
+    CaptureKind m_kind;
     std::jthread m_thread;
     util::RingBuffer<float> m_samples;
     ac::SpinLock m_samplesLock;

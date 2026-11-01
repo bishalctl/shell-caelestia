@@ -28,7 +28,7 @@ void BeatProcessor::process() {
         return;
     }
 
-    AudioCollector::instance().readChunk(m_in->data);
+    collector().readChunk(m_in->data);
 
     aubio_tempo_do(m_tempo, m_in, m_out);
     if (!qFuzzyIsNull(m_out->data[0])) {

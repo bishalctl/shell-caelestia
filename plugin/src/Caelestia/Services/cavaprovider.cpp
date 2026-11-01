@@ -5,6 +5,7 @@
 #include <cava/cavacore.h>
 
 #include <cstddef>
+#include <mutex>
 
 #include "audiocollector.hpp"
 #include "audioprovider.hpp"
@@ -13,6 +14,14 @@ namespace {
 
 Q_LOGGING_CATEGORY(lcCava, "caelestia.services.cava", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcCavaProcessor, "caelestia.services.cava.processor", QtInfoMsg)
+
+// cava_init/cava_destroy go through the FFTW planner, which is not thread-safe. Several
+// CavaProcessors (media visualiser, dictation mic meter) live on their own threads, so
+// serialise plan creation/destruction across them.
+std::mutex& planMutex() {
+    static std::mutex s_mutex;
+    return s_mutex;
+}
 
 } // namespace
 
@@ -35,7 +44,7 @@ void CavaProcessor::process() {
         return;
     }
 
-    const int count = static_cast<int>(AudioCollector::instance().readChunk(m_in));
+    const int count = static_cast<int>(collector().readChunk(m_in));
 
     // Process in data via cava
     cava_execute(m_in, count, m_out, m_plan);
@@ -84,6 +93,7 @@ void CavaProcessor::reload() {
 
 void CavaProcessor::cleanup() {
     if (m_plan) {
+        const std::scoped_lock lock(planMutex());
         cava_destroy(m_plan);
         m_plan = nullptr;
     }
@@ -99,6 +109,7 @@ void CavaProcessor::initCava() {
         return;
     }
 
+    const std::scoped_lock lock(planMutex());
     m_plan = cava_init(m_bars, ac::k_sampleRate, 1, 1, 0.85, 50, 10000);
     m_out = new double[static_cast<size_t>(m_bars)];
 }

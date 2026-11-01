@@ -47,10 +47,16 @@ PipeWireWorker::PipeWireWorker(std::stop_token token, AudioCollector* collector)
     }
     pw_loop_update_timer(pw_main_loop_get_loop(m_loop), m_timer, &timeout, &timeout, false);
 
-    auto* props = pw_properties_new(
-        PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture", PW_KEY_MEDIA_ROLE, "Music", nullptr);
-    pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");
-    pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
+    const bool mic = m_collector->kind() == CaptureKind::Source;
+    auto* props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture", PW_KEY_MEDIA_ROLE,
+        mic ? "Communication" : "Music", nullptr);
+    if (mic) {
+        // Follow the default source. Not passive: the mic must actually run while a consumer wants levels.
+        pw_properties_set(props, PW_KEY_NODE_PASSIVE, "false");
+    } else {
+        pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");
+        pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
+    }
     pw_properties_set(props, PW_KEY_NODE_VIRTUAL, "true");
     pw_properties_set(props, PW_KEY_STREAM_DONT_REMIX, "false");
     pw_properties_set(props, "channelmix.upmix", "true");
@@ -164,9 +170,14 @@ void PipeWireWorker::processStream() {
     pw_stream_queue_buffer(m_stream, buffer);
 }
 
-AudioCollector& AudioCollector::instance() {
-    static AudioCollector s_instance;
-    return s_instance;
+AudioCollector& AudioCollector::instance(CaptureKind kind) {
+    static AudioCollector s_sink(CaptureKind::Sink);
+    static AudioCollector s_source(CaptureKind::Source);
+    return kind == CaptureKind::Source ? s_source : s_sink;
+}
+
+CaptureKind AudioCollector::kind() const {
+    return m_kind;
 }
 
 void AudioCollector::clearBuffer() {
@@ -222,8 +233,9 @@ quint32 AudioCollector::readChunk(double* out, quint32 count) {
     return readLatest(out, count);
 }
 
-AudioCollector::AudioCollector(QObject* parent)
+AudioCollector::AudioCollector(CaptureKind kind, QObject* parent)
     : Service(parent)
+    , m_kind(kind)
     , m_samples(ac::k_chunkSize)
     , m_pending(ac::k_chunkSize)
     , m_discardPending(false) {}

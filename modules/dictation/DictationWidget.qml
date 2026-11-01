@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Caelestia.Config
+import Caelestia.Services
 import qs.components
 import qs.components.containers
 import qs.components.effects
@@ -68,11 +69,28 @@ Variants {
                 anchors.centerIn: parent
                 spacing: Tokens.spacing.medium
 
-                // Animated waveform bars
+                // Waveform bars: driven by the microphone while listening (native PipeWire tap of
+                // the default source, 4 cava bands), and a gentle idle pulse while converting.
+                CavaProvider {
+                    id: micCava
+
+                    microphone: true
+                    bars: 4
+                }
+
+                // Only hold the mic stream open while actually listening
+                Loader {
+                    active: Dictation.state === "listening"
+                    sourceComponent: ServiceRef {
+                        service: micCava
+                    }
+                }
+
                 Row {
                     id: wave
 
-                    readonly property bool playing: Dictation.active
+                    readonly property bool live: Dictation.state === "listening"
+                    readonly property bool playing: Dictation.state === "converting"
                     spacing: 3
                     // Fixed height (≥ the max animated bar height) so the pulsing bars don't
                     // resize the card every frame — otherwise the whole popup jitters vertically.
@@ -85,11 +103,20 @@ Variants {
                         delegate: StyledRect {
                             required property int index
 
+                            readonly property real level: wave.live ? Math.min(1, micCava.values[index] ?? 0) : 0
+
                             width: 4
-                            height: 7
+                            height: wave.live ? 7 + level * 15 : 7
                             radius: 2
                             anchors.verticalCenter: parent.verticalCenter
                             color: Dictation.state === "converting" ? Colours.palette.m3onSurfaceVariant : Colours.palette.m3primary
+
+                            Behavior on height {
+                                enabled: wave.live
+                                NumberAnimation {
+                                    duration: 60
+                                }
+                            }
 
                             SequentialAnimation on height {
                                 running: wave.playing

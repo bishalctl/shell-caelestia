@@ -28,7 +28,7 @@ void AudioProcessor::init() {
 }
 
 void AudioProcessor::start() {
-    QMetaObject::invokeMethod(&AudioCollector::instance(), &AudioCollector::ref, Qt::QueuedConnection, this);
+    QMetaObject::invokeMethod(&collector(), &AudioCollector::ref, Qt::QueuedConnection, this);
     if (m_timer) {
         m_timer->start();
     }
@@ -38,7 +38,15 @@ void AudioProcessor::stop() {
     if (m_timer) {
         m_timer->stop();
     }
-    QMetaObject::invokeMethod(&AudioCollector::instance(), &AudioCollector::unref, Qt::QueuedConnection, this);
+    QMetaObject::invokeMethod(&collector(), &AudioCollector::unref, Qt::QueuedConnection, this);
+}
+
+void AudioProcessor::setCollector(AudioCollector* collector) {
+    m_collector = collector;
+}
+
+AudioCollector& AudioProcessor::collector() const {
+    return m_collector ? *m_collector : AudioCollector::instance();
 }
 
 AudioProvider::AudioProvider(QObject* parent)
@@ -50,6 +58,17 @@ AudioProvider::~AudioProvider() {
     if (m_thread) {
         m_thread->quit();
         m_thread->wait();
+    }
+}
+
+bool AudioProvider::microphone() const {
+    return m_microphone;
+}
+
+void AudioProvider::setMicrophone(bool microphone) {
+    if (m_microphone != microphone) {
+        m_microphone = microphone;
+        emit microphoneChanged();
     }
 }
 
@@ -71,7 +90,9 @@ void AudioProvider::init() {
 
 void AudioProvider::start() {
     if (m_processor) {
-        AudioCollector::instance(); // Create instance on main thread
+        // Create the collector on the main thread, then hand it to the processor before it starts
+        auto* collector = &AudioCollector::instance(m_microphone ? CaptureKind::Source : CaptureKind::Sink);
+        QMetaObject::invokeMethod(m_processor, &AudioProcessor::setCollector, Qt::QueuedConnection, collector);
         QMetaObject::invokeMethod(m_processor, &AudioProcessor::start);
     }
 }
