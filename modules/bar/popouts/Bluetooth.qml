@@ -20,9 +20,12 @@ ColumnLayout {
     spacing: Tokens.spacing.small
 
     StyledText {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
         Layout.topMargin: Tokens.padding.medium
         Layout.rightMargin: Tokens.padding.extraSmall
         text: Tr.tr("Bluetooth")
+        wrapMode: Text.WordWrap
         font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
     }
 
@@ -47,6 +50,8 @@ ColumnLayout {
     }
 
     StyledText {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
         Layout.topMargin: Tokens.spacing.small
         Layout.rightMargin: Tokens.padding.extraSmall
         text: {
@@ -59,6 +64,7 @@ ColumnLayout {
         }
         color: Colours.palette.m3onSurfaceVariant
         font: Tokens.font.body.small
+        wrapMode: Text.WordWrap
     }
 
     Repeater {
@@ -102,6 +108,7 @@ ColumnLayout {
                 Layout.leftMargin: Tokens.spacing.extraSmall
                 Layout.rightMargin: Tokens.spacing.extraSmall
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 text: device.modelData.name
                 elide: Text.ElideRight
             }
@@ -195,7 +202,9 @@ ColumnLayout {
 
         StyledText {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             text: parent.label
+            wrapMode: Text.WordWrap
         }
 
         StyledSwitch {
