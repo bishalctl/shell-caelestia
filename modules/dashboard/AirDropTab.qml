@@ -37,6 +37,14 @@ Item {
     implicitWidth: 840
     implicitHeight: layout.implicitHeight
 
+    function applyName(): void {
+        const next = nameField.text.trim();
+        if (!next)
+            return;
+        AirDrop.name = next;
+        nameField.text = Qt.binding(() => AirDrop.name);
+    }
+
     function formatSize(bytes: real): string {
         if (bytes >= 1024 * 1024 * 1024)
             return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GiB`;
@@ -65,47 +73,57 @@ Item {
             Layout.fillWidth: true
             spacing: Tokens.spacing.large
 
-            StyledRect {
-                implicitWidth: 56
-                implicitHeight: 56
-                radius: Tokens.rounding.full
-                color: AirDrop.radioState === "up" ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
+            Item {
+                // The 56px disc pulses out to 89.6px. Reserve its whole halo
+                // inside the dashboard's clipped viewport, even while off.
+                implicitWidth: 96
+                implicitHeight: 96
 
-                SvgIcon {
-                    anchors.centerIn: parent
-                    name: "airdrop"
-                    fontStyle: Tokens.font.icon.extraLarge
-                    color: AirDrop.radioState === "up" ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
-                }
-
-                // Pulse while visible
                 StyledRect {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 2
-                    border.color: Colours.palette.m3primary
-                    opacity: 0
-                    scale: 1
+                    anchors.centerIn: parent
+                    width: 56
+                    height: 56
+                    radius: Tokens.rounding.full
+                    color: AirDrop.radioState === "up" ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
 
-                    SequentialAnimation on opacity {
-                        running: AirDrop.radioState === "up"
-                        loops: Animation.Infinite
-                        NumberAnimation {
-                            from: 0.7
-                            to: 0
-                            duration: 1600
-                            easing.type: Easing.OutCubic
-                        }
+                    SvgIcon {
+                        anchors.centerIn: parent
+                        anchors.verticalCenterOffset: 2
+                        name: "airdrop"
+                        fontStyle: Tokens.font.icon.extraLarge
+                        color: AirDrop.radioState === "up" ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
                     }
-                    SequentialAnimation on scale {
-                        running: AirDrop.radioState === "up"
-                        loops: Animation.Infinite
-                        NumberAnimation {
-                            from: 1
-                            to: 1.6
-                            duration: 1600
-                            easing.type: Easing.OutCubic
+
+                    // Pulse while visible
+                    StyledRect {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "transparent"
+                        border.width: 2
+                        border.color: Colours.palette.m3primary
+                        opacity: 0
+                        scale: 1
+                        visible: AirDrop.radioState === "up"
+
+                        SequentialAnimation on opacity {
+                            running: AirDrop.radioState === "up"
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                from: 0.7
+                                to: 0
+                                duration: 1600
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        SequentialAnimation on scale {
+                            running: AirDrop.radioState === "up"
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                from: 1
+                                to: 1.6
+                                duration: 1600
+                                easing.type: Easing.OutCubic
+                            }
                         }
                     }
                 }
@@ -314,20 +332,35 @@ Item {
                 title: Tr.tr("They see you as")
                 icon: "badge"
 
-                StyledTextField {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: AirDrop.name
-                    placeholderText: Tr.tr("Name shown on Apple devices")
-                    onEditingFinished: {
-                        if (text.trim() && text.trim() !== AirDrop.name)
-                            AirDrop.name = text.trim();
+                    spacing: Tokens.spacing.small
+
+                    StyledTextField {
+                        id: nameField
+
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: AirDrop.name
+                        placeholderText: Tr.tr("Name shown on Apple devices")
+                        onAccepted: root.applyName()
+                        Keys.onEscapePressed: text = Qt.binding(() => AirDrop.name)
+                    }
+
+                    IconButton {
+                        icon: "check"
+                        type: IconButton.Tonal
+                        visible: nameField.text !== AirDrop.name
+                        disabled: !nameField.text.trim()
+                        Accessible.name: Tr.tr("Apply device name")
+                        onClicked: root.applyName()
                     }
                 }
 
                 StyledText {
                     visible: AirDrop.active
                     Layout.fillWidth: true
-                    text: Tr.tr("Applies the next time receiving is turned on")
+                    text: Tr.tr("Confirm a new name with the checkmark or Enter")
                     font: Tokens.font.label.small
                     color: Colours.palette.m3onSurfaceVariant
                     wrapMode: Text.WordWrap
@@ -344,6 +377,7 @@ Item {
 
                     StyledTextField {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: Paths.shortenHome(AirDrop.dir)
                         placeholderText: "~/Downloads"
                         onEditingFinished: {
@@ -356,7 +390,15 @@ Item {
                     IconButton {
                         icon: "open_in_new"
                         type: IconButton.Tonal
+                        Accessible.name: Tr.tr("Open receive folder")
                         onClicked: AirDrop.openDir()
+                    }
+
+                    IconButton {
+                        icon: "folder_open"
+                        type: IconButton.Tonal
+                        Accessible.name: Tr.tr("Choose receive folder")
+                        onClicked: AirDrop.pickDirectory(root.Window.window)
                     }
                 }
             }
@@ -645,14 +687,14 @@ Item {
         Card {
             id: transfersCard
 
-            // Sends first (they're live), then what came in. Five rows show; more scroll.
+            // Sends first (they're live), then what came in. Two rows show; more scroll.
             readonly property var rows: [...AirDrop.sends.map(s => Object.assign({
                         row: "send"
                     }, s)), ...AirDrop.received.map(r => Object.assign({
                         row: "recv"
                     }, r))]
             readonly property int rowHeight: 44
-            readonly property int maxRows: 5
+            readonly property int maxRows: 2
 
             visible: rows.length > 0
             title: Tr.tr("Transfers")
@@ -668,7 +710,7 @@ Item {
                 id: transferList
 
                 Layout.fillWidth: true
-                implicitHeight: Math.min(count, transfersCard.maxRows) * (transfersCard.rowHeight + spacing) - spacing
+                implicitHeight: Math.max(0, Math.min(count, transfersCard.maxRows) * (transfersCard.rowHeight + spacing) - spacing)
                 spacing: Tokens.spacing.small
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds

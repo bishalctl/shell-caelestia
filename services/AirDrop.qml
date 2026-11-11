@@ -321,6 +321,19 @@ Singleton {
         filePicker.open();
     }
 
+    function fileUrl(path: string): string {
+        return "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
+    }
+
+    // Keep the chooser in the service: the dashboard unloads when a dialog
+    // takes focus, but the accepted folder still needs to be applied.
+    function pickDirectory(win: var): void {
+        if (win)
+            directoryPicker.parentWindow = win;
+        directoryPicker.currentFolder = fileUrl(dir);
+        directoryPicker.open();
+    }
+
     function showTab(): void {
         const s = ShellState.forActive();
         if (s)
@@ -340,7 +353,7 @@ Singleton {
         Quickshell.execDetached([...GlobalConfig.launcher.launchPrefix, "xdg-open", dir]);
     }
 
-    // Image files whose mime type the clipboard understands: pasting them gives the picture
+    // Recognized image files are decoded and copied as PNG for clipboard clients.
     readonly property var imageMimes: ({
         png: "image/png",
         jpg: "image/jpeg",
@@ -369,8 +382,10 @@ Singleton {
         }
         const mime = imageMime(entry.path);
         if (mime) {
-            Quickshell.execDetached(["sh", "-c", 'exec wl-copy --type "$1" < "$2"', "wl-copy", mime, entry.path]);
-            Toaster.toast(Tr.tr("Image copied"), fileName(entry.path), "content_copy");
+            CUtils.copyImage(fileUrl(entry.path), () => {
+                Toaster.toast(Tr.tr("Image copied"), fileName(entry.path), "content_copy");
+                Clipboard.reload();
+            }, error => Toaster.toast(Tr.tr("Couldn't copy image"), error, "error"));
         } else {
             Quickshell.execDetached(["wl-copy", "--", entry.path]);
             Toaster.toast(Tr.tr("Path copied"), entry.path, "content_copy");
@@ -421,6 +436,19 @@ Singleton {
             root.stageFiles(files);
             root.showTab(); // the dashboard closed when the dialog took focus
         }
+    }
+
+    Native.FolderDialog {
+        id: directoryPicker
+
+        title: Tr.tr("Choose where AirDrop saves files")
+        onAccepted: {
+            const path = CUtils.toLocalFile(selectedFolder);
+            if (path)
+                root.dir = path;
+            root.showTab();
+        }
+        onRejected: root.showTab()
     }
 
     FileView {

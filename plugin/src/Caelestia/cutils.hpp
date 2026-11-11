@@ -26,6 +26,7 @@ public:
         const QJSValue& onFailed = {});
 
     Q_INVOKABLE static bool copyFile(const QUrl& source, const QUrl& target, bool overwrite = true);
+    Q_INVOKABLE void copyImage(const QUrl& path, const QJSValue& onCopied = {}, const QJSValue& onFailed = {});
     Q_INVOKABLE static bool deleteFile(const QUrl& path);
     Q_INVOKABLE static QString toLocalFile(const QUrl& url);
 

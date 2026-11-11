@@ -1,20 +1,29 @@
 #include "cutils.hpp"
 
+#include <qbuffer.h>
 #include <qdir.h>
 #include <qfileinfo.h>
+#include <qimagereader.h>
 #include <qloggingcategory.h>
 #include <qmetaobject.h>
+#include <qprocess.h>
 #include <qqmlengine.h>
 #include <qquickitemgrabresult.h>
 #include <qquickwindow.h>
 #include <qregularexpression.h>
 #include <qtconcurrentrun.h>
+#include <qtimer.h>
 
 #include "util/metaenum.hpp"
 
 namespace {
 
 Q_LOGGING_CATEGORY(lcCUtils, "caelestia.cutils", QtInfoMsg)
+
+struct ClipboardImage {
+    QByteArray png;
+    QString error;
+};
 
 } // namespace
 
@@ -93,6 +102,70 @@ bool CUtils::copyFile(const QUrl& source, const QUrl& target, bool overwrite) {
     }
 
     return QFile::copy(source.toLocalFile(), target.toLocalFile());
+}
+
+void CUtils::copyImage(const QUrl& path, const QJSValue& onCopied, const QJSValue& onFailed) {
+    const auto complete = [onCopied, onFailed](bool ok, const QString& error) {
+        if (ok) {
+            if (onCopied.isCallable())
+                onCopied.call();
+        } else {
+            qCWarning(lcCUtils) << "copyImage:" << error;
+            if (onFailed.isCallable())
+                onFailed.call({ error });
+        }
+    };
+    if (!path.isLocalFile()) {
+        complete(false, tr("The image must be a local file"));
+        return;
+    }
+
+    // PNG is understood by browsers and clipboard history. Decode off the UI
+    // thread and apply EXIF orientation instead of offering only JPEG/HEIC.
+    QtConcurrent::run([file = path.toLocalFile()] {
+        QImageReader reader(file);
+        reader.setAutoTransform(true);
+        const auto image = reader.read();
+        if (image.isNull())
+            return ClipboardImage{ {}, reader.errorString() };
+        QByteArray png;
+        QBuffer buffer(&png);
+        if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+            return ClipboardImage{ {}, CUtils::tr("Unable to encode the image as PNG") };
+        return ClipboardImage{ std::move(png), {} };
+    }).then(this, [this, complete](ClipboardImage image) {
+        if (!image.error.isEmpty()) {
+            complete(false, image.error);
+            return;
+        }
+        // wl-copy uses Wayland data-control, so the clipboard also works when
+        // this layer-shell panel closes. Its detached owner retains the data.
+        auto* process = new QProcess(this);
+        const auto finish = [process, complete](bool ok, const QString& error) {
+            if (process->property("completed").toBool())
+                return;
+            process->setProperty("completed", true);
+            complete(ok, error);
+            process->deleteLater();
+        };
+        connect(process, &QProcess::started, this, [process, png = std::move(image.png)] {
+            process->write(png);
+            process->closeWriteChannel();
+        });
+        connect(process, &QProcess::errorOccurred, this, [process, finish](QProcess::ProcessError) {
+            finish(false, process->errorString());
+        });
+        connect(process, &QProcess::finished, this, [process, finish](int code, QProcess::ExitStatus status) {
+            const auto ok = status == QProcess::NormalExit && code == 0;
+            const auto detail = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+            finish(ok, detail.isEmpty() ? CUtils::tr("Unable to write to the clipboard") : detail);
+        });
+        QTimer::singleShot(10000, process, [process, finish] {
+            process->kill();
+            finish(false, CUtils::tr("The clipboard did not respond"));
+        });
+        process->start(QStringLiteral("wl-copy"), { QStringLiteral("--type"), QStringLiteral("image/png") });
+    });
 }
 
 bool CUtils::deleteFile(const QUrl& path) {
