@@ -74,7 +74,9 @@ StyledWindow {
     // Fullscreen clients render above the Top layer. Lift to Overlay when showOverFullscreen is
     // set, or while the volume/brightness OSD is on screen so it stays visible over fullscreen windows.
     WlrLayershell.layer: (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || panels.osd.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || panels.popouts.currentName === "ephemera" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // AirDrop's dashboard fields need keyboard input after a click. OnDemand
+    // keeps merely opening or hovering the dashboard from taking the keyboard.
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.dashboard || panels.popouts.currentName === "ephemera" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
