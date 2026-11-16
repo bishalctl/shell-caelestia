@@ -9,6 +9,23 @@
 
 namespace caelestia::shell::services {
 
+inline bool isGameController(const std::bitset<KEY_CNT>& keys, const std::bitset<ABS_CNT>& axes,
+    const std::bitset<REL_CNT>& relative) {
+    if (!keys[BTN_GAMEPAD] && !keys[BTN_JOYSTICK] && !keys[BTN_DPAD_UP])
+        return false;
+    // Some virtual keyboards advertise every button code. Requiring actual
+    // game controls, and excluding typing/pointer interfaces, keeps them out.
+    if ((keys[KEY_A] && keys[KEY_Z]) || relative[REL_X] || relative[REL_Y])
+        return false;
+    bool hasAxis = false;
+    for (unsigned int code = ABS_X; code <= ABS_HAT3Y; ++code) {
+        if (code <= ABS_BRAKE || code >= ABS_HAT0X)
+            hasAxis |= axes[code];
+    }
+    const bool hasDpad = keys[BTN_DPAD_UP] && keys[BTN_DPAD_DOWN] && keys[BTN_DPAD_LEFT] && keys[BTN_DPAD_RIGHT];
+    return hasAxis || hasDpad;
+}
+
 // Input filtering is independent of Qt and window focus. Initial state and
 // small stick noise never count as user activity; held controls do, once used.
 class ControllerInput {

@@ -5,8 +5,36 @@
 #include <iostream>
 
 using caelestia::shell::services::ControllerInput;
+using caelestia::shell::services::isGameController;
 
 int main() {
+    std::bitset<KEY_CNT> keys;
+    std::bitset<ABS_CNT> axes;
+    std::bitset<REL_CNT> relative;
+    // ydotool and the Wispr helper advertise gamepad buttons along with typing
+    // keys, but have no game axes. Neither may be opened by the controller reader.
+    keys.set();
+    assert(!isGameController(keys, axes, relative));
+    axes[ABS_X] = axes[ABS_Y] = true;
+    assert(!isGameController(keys, axes, relative));
+    keys.reset();
+    keys[BTN_GAMEPAD] = true;
+    assert(isGameController(keys, axes, relative));
+    relative[REL_X] = true;
+    assert(!isGameController(keys, axes, relative));
+    relative.reset();
+    keys.reset();
+    keys[BTN_JOYSTICK] = true; // Keychron's separate joystick interface.
+    assert(isGameController(keys, axes, relative));
+    axes.reset();
+    assert(!isGameController(keys, axes, relative));
+    keys.reset();
+    keys[BTN_DPAD_UP] = keys[BTN_DPAD_DOWN] = keys[BTN_DPAD_LEFT] = keys[BTN_DPAD_RIGHT] = true;
+    assert(isGameController(keys, axes, relative)); // Digital-only gamepads.
+    keys.reset();
+    axes[ABS_X] = axes[ABS_Y] = true;
+    assert(!isGameController(keys, axes, relative)); // A touch device isn't a controller.
+
     ControllerInput input;
     input.configureAxis(ABS_X, { .value = 120, .minimum = -32768, .maximum = 32767, .fuzz = 16, .flat = 1000, .resolution = 0 });
     assert(!input.held());
@@ -62,5 +90,5 @@ int main() {
     assert(!input.process(EV_ABS, ABS_X, 30001));
     assert(input.process(EV_ABS, ABS_X, 0));
     assert(!input.held());
-    std::cout << "Controller input: initialization, drift, sticks, triggers, hats, held buttons, noise and resync passed\n";
+    std::cout << "Controller input: device classification, initialization, drift, sticks, triggers, hats, held buttons, noise and resync passed\n";
 }

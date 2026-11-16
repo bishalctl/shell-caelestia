@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <bitset>
 #include <cerrno>
 
 #include "controllerinput.hpp"
@@ -21,6 +22,22 @@ Q_LOGGING_CATEGORY(lcControllerActivity, "caelestia.services.controlleractivity"
 template <std::size_t N>
 bool bitSet(const std::array<unsigned char, N>& bits, unsigned int bit) {
     return bit / 8 < N && (bits[bit / 8] & (1U << (bit % 8))) != 0;
+}
+
+template <std::size_t N>
+std::bitset<N> capabilities(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const auto words = file.readAll().simplified().split(' ');
+    std::bitset<N> bits;
+    constexpr auto width = sizeof(unsigned long) * 8;
+    for (std::size_t bit = 0; bit < N; ++bit) {
+        const auto index = static_cast<qsizetype>(bit / width);
+        if (index < words.size())
+            bits[bit] = (words[words.size() - index - 1].toULongLong(nullptr, 16) & (1ULL << (bit % width))) != 0;
+    }
+    return bits;
 }
 
 } // namespace
@@ -64,17 +81,9 @@ int ControllerActivity::deviceCount() const {
 bool ControllerActivity::isController(const QString& eventName) {
     // Inspect only capability metadata before opening anything. In particular,
     // this service never opens keyboard/mouse nodes to discover their type.
-    QFile keys(u"/sys/class/input/"_s + eventName + u"/device/capabilities/key"_s);
-    if (!keys.open(QIODevice::ReadOnly))
-        return false;
-    const auto words = keys.readAll().simplified().split(' ');
-    const auto hasKey = [&words](unsigned int key) {
-        constexpr auto width = sizeof(unsigned long) * 8;
-        const auto index = static_cast<qsizetype>(key / width);
-        return index < words.size()
-            && (words[words.size() - index - 1].toULongLong(nullptr, 16) & (1ULL << (key % width))) != 0;
-    };
-    return hasKey(BTN_GAMEPAD) || hasKey(BTN_JOYSTICK) || hasKey(BTN_DPAD_UP);
+    const auto path = u"/sys/class/input/"_s + eventName + u"/device/capabilities/"_s;
+    return isGameController(capabilities<KEY_CNT>(path + u"key"_s), capabilities<ABS_CNT>(path + u"abs"_s),
+        capabilities<REL_CNT>(path + u"rel"_s));
 }
 
 void ControllerActivity::initializeState(Device& device) {
