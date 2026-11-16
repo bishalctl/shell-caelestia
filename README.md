@@ -172,21 +172,35 @@ Use `caelestia wallpaper -h` for more info about this command.
 
 ### Keep Awake
 
-The utilities drawer's **Keep awake** card has three levels of idle protection:
+The utilities drawer's **Keep awake** switch blocks automatic sleep and hibernation.
+When it is on, two independent options control the other idle actions:
 
-- The main switch keeps the session fully awake (no idle lock, screen off or sleep).
-- **Automatic when fullscreen** (`general.idle.inhibitWhenFullscreen`, on by default) applies the same
-  protection while a fullscreen window is visible on any monitor or open special workspace, so games
-  played with a controller or cutscenes don't trigger idle timeouts. Normal timeouts resume when no
-  fullscreen window is visible.
-- **Block sleep only** lets idle lock and screen off fire normally but blocks sleep-type timeouts
-  (suspend/hibernate), for leaving jobs running behind a locked screen. The **Lock now** button locks
-  the session and blanks the screens immediately.
+| Can lock | Can screen blank | Result while Keep awake is on |
+| --- | --- | --- |
+| On | Off | Locks normally; the lock screen stays visible (default). |
+| On | On | Locks and blanks normally. |
+| Off | On | Blanks without automatically locking; input wakes the screen. |
+| Off | Off | Keeps the screen on without automatically locking. |
 
-Both manual modes persist across shell restarts. For scripts, `caelestia shell idleInhibitor getMode`
-reports `off`, `full` or `sleepOnly` (`setMode <mode>`, `toggle`, `toggleSleepOnly` change it),
-`isInhibiting` reports whether manual or fullscreen protection is active and `isFullscreenActive`
-reports fullscreen protection specifically.
+The choices persist across toggles, shell restarts and reboots. Turning Keep awake off
+restores the configured idle actions. Fullscreen windows do not enable Keep awake.
+Controller input is monitored globally, so playing a game on an unfocused monitor resets
+idle timers just like keyboard/mouse input. Connected but unused controllers, initial device
+state, and stick noise do not keep the session awake. Deliberately held controls count as
+activity; controller activity can wake a blank screen but cannot unlock the session.
+
+Linux controller monitoring needs read access to the relevant `/dev/input/event*` gamepad
+nodes. It only opens devices whose sysfs capabilities identify them as joysticks/gamepads;
+there is no device grab or synthetic keyboard/mouse input. The native service requires no
+additional library. If the desktop already grants gamepad access, no permission change is needed.
+
+For scripts, `caelestia shell idleInhibitor` exposes `toggle`, `enable`, `disable`, `isEnabled`,
+`canLock`, `canScreenBlank`, `setCanLock <bool>` and `setCanScreenBlank <bool>`.
+`isInhibiting` reports the full Wayland inhibitor, which is needed only when both options are off.
+Automatic idle actions should be owned by the shell: duplicate hypridle listeners or logind
+`IdleAction` timers cannot honor these per-action preferences. Set each timeout's
+`respectInhibitors` to `false` if idle should depend only on user input, even when an app
+requests a Wayland idle inhibitor; the manual Keep awake choices are always enforced locally.
 
 ## Updating
 
@@ -448,7 +462,6 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
             "lockBeforeSleep": true,
             "inhibitWhenAudio": true,
             "inhibitWhenCharging": false,
-            "inhibitWhenFullscreen": true,
             "timeouts": [
                 {
                     "timeout": 180,

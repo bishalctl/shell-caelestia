@@ -18,6 +18,7 @@ qml_module(caelestia-services
         lyriccandidate.cpp
         lyrics.cpp
         sessionmanager.cpp
+        controlleractivity.cpp
         networkusage.cpp
         hyprdevices.cpp
         hyprextras.cpp

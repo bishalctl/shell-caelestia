@@ -10,7 +10,7 @@ import qs.services
 StyledRect {
     id: root
 
-    readonly property real nonAnimHeight: layout.implicitHeight + (KeepAwake.active ? activeChip.implicitHeight + activeChip.anchors.topMargin : 0) + Tokens.padding.extraLargeIncreased
+    readonly property real nonAnimHeight: layout.implicitHeight + (KeepAwake.enabled ? activeChip.implicitHeight + activeChip.anchors.topMargin : 0) + Tokens.padding.extraLargeIncreased
 
     implicitHeight: nonAnimHeight
 
@@ -36,14 +36,14 @@ StyledRect {
                 implicitHeight: icon.implicitHeight + Tokens.padding.large
 
                 radius: Tokens.rounding.full
-                color: KeepAwake.active ? Colours.palette.m3secondary : Colours.palette.m3secondaryContainer
+                color: KeepAwake.enabled ? Colours.palette.m3secondary : Colours.palette.m3secondaryContainer
 
                 MaterialIcon {
                     id: icon
 
                     anchors.centerIn: parent
                     text: "coffee"
-                    color: KeepAwake.active ? Colours.palette.m3onSecondary : Colours.palette.m3onSecondaryContainer
+                    color: KeepAwake.enabled ? Colours.palette.m3onSecondary : Colours.palette.m3onSecondaryContainer
                     fontStyle: Tokens.font.icon.large
                 }
             }
@@ -62,13 +62,15 @@ StyledRect {
                 StyledText {
                     Layout.fillWidth: true
                     text: {
-                        if (KeepAwake.enabled)
-                            return Tr.trCtx("Preventing lock, screen off & sleep", "idle inhibitor");
-                        if (KeepAwake.fullscreenActive)
-                            return Tr.trCtx("Fullscreen: preventing lock, screen off & sleep", "idle inhibitor");
-                        if (KeepAwake.sleepOnly)
-                            return Tr.trCtx("Locks & blanks normally, never sleeps", "idle inhibitor");
-                        return Tr.trCtx("Normal power management", "idle inhibitor");
+                        if (!KeepAwake.enabled)
+                            return Tr.trCtx("Normal power management", "idle inhibitor");
+                        if (KeepAwake.allowLock && KeepAwake.allowScreenBlank)
+                            return Tr.trCtx("Can lock & blank; never sleeps", "idle inhibitor");
+                        if (KeepAwake.allowLock)
+                            return Tr.trCtx("Can lock; screen stays on", "idle inhibitor");
+                        if (KeepAwake.allowScreenBlank)
+                            return Tr.trCtx("Can blank; stays unlocked", "idle inhibitor");
+                        return Tr.trCtx("Screen stays on & unlocked", "idle inhibitor");
                     }
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.small
@@ -77,6 +79,7 @@ StyledRect {
             }
 
             StyledSwitch {
+                objectName: "keepAwakeSwitch"
                 checked: RuntimeState.inhibitIdle
                 onToggled: RuntimeState.inhibitIdle = checked
             }
@@ -85,38 +88,40 @@ StyledRect {
         RowLayout {
             Layout.fillWidth: true
             spacing: Tokens.spacing.medium
+            visible: KeepAwake.enabled
 
             StyledText {
                 Layout.fillWidth: true
-                text: Tr.trCtx("Automatic when fullscreen", "idle inhibitor")
+                text: Tr.trCtx("Can lock", "idle inhibitor")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.small
                 elide: Text.ElideRight
             }
 
             StyledSwitch {
-                checked: GlobalConfig.general.idle.inhibitWhenFullscreen
-                onToggled: GlobalConfig.general.idle.inhibitWhenFullscreen = checked
+                objectName: "keepAwakeAllowLockSwitch"
+                checked: KeepAwake.allowLock
+                onToggled: PersistentState.keepAwakeAllowLock = checked
             }
         }
 
-        // Sleep-only mode: idle lock/screen off still fire, only suspend is blocked —
-        // for leaving jobs running in the background behind a locked screen.
         RowLayout {
             Layout.fillWidth: true
             spacing: Tokens.spacing.medium
+            visible: KeepAwake.enabled
 
             StyledText {
                 Layout.fillWidth: true
-                text: Tr.trCtx("Block sleep only", "idle inhibitor")
+                text: Tr.trCtx("Can screen blank", "idle inhibitor")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.small
                 elide: Text.ElideRight
             }
 
             StyledSwitch {
-                checked: RuntimeState.inhibitSleepOnly
-                onToggled: RuntimeState.inhibitSleepOnly = checked
+                objectName: "keepAwakeAllowScreenBlankSwitch"
+                checked: KeepAwake.allowScreenBlank
+                onToggled: PersistentState.keepAwakeAllowScreenBlank = checked
             }
         }
     }
@@ -129,12 +134,12 @@ StyledRect {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.topMargin: Tokens.spacing.large
-        anchors.bottomMargin: KeepAwake.active ? Tokens.padding.large : -implicitHeight
+        anchors.bottomMargin: KeepAwake.enabled ? Tokens.padding.large : -implicitHeight
         anchors.leftMargin: Tokens.padding.large
         anchors.rightMargin: Tokens.padding.large
 
-        opacity: KeepAwake.active ? 1 : 0
-        scale: KeepAwake.active ? 1 : 0.5
+        opacity: KeepAwake.enabled ? 1 : 0
+        scale: KeepAwake.enabled ? 1 : 0.5
 
         Component.onCompleted: active = Qt.binding(() => opacity > 0)
 
@@ -153,7 +158,7 @@ StyledRect {
 
                     anchors.centerIn: parent
                     // TRANSLATORS: %1 = a clock time, e.g. 14:30
-                    text: KeepAwake.fullscreenActive && !KeepAwake.enabled ? Tr.trCtx("Automatic · fullscreen", "idle inhibitor") : Tr.tr("Active since %1").arg(Tr.formatDateTime(new Date(RuntimeState.inhibitingIdleSince), Units.twelveHourClock ? "hh:mm a" : "hh:mm"))
+                    text: Tr.tr("Active since %1").arg(Tr.formatDateTime(new Date(RuntimeState.inhibitingIdleSince), Units.twelveHourClock ? "hh:mm a" : "hh:mm"))
                     color: Colours.palette.m3onPrimary
                     font: Tokens.font.body.builders.small.size(Math.round(Tokens.font.body.small.pointSize * 0.9)).build()
                 }
@@ -161,15 +166,6 @@ StyledRect {
 
             Item {
                 Layout.fillWidth: true
-            }
-
-            IconTextButton {
-                visible: KeepAwake.sleepOnly
-                type: IconTextButton.Tonal
-                icon: "lock"
-                text: Tr.trCtx("Lock now", "idle inhibitor")
-                font: Tokens.font.body.builders.small.size(Math.round(Tokens.font.body.small.pointSize * 0.9)).build()
-                onClicked: KeepAwake.lockAndBlank()
             }
         }
 

@@ -69,8 +69,12 @@ Scope {
             return KeepAwake.inhibiting;
         }
 
-        function isFullscreenActive(): bool {
-            return KeepAwake.fullscreenActive;
+        function canLock(): bool {
+            return KeepAwake.allowLock;
+        }
+
+        function canScreenBlank(): bool {
+            return KeepAwake.allowScreenBlank;
         }
 
         function toggle(): void {
@@ -85,20 +89,12 @@ Scope {
             RuntimeState.inhibitIdle = false;
         }
 
-        function toggleSleepOnly(): void {
-            RuntimeState.inhibitSleepOnly = !RuntimeState.inhibitSleepOnly;
+        function setCanLock(allowed: bool): void {
+            PersistentState.keepAwakeAllowLock = allowed;
         }
 
-        function getMode(): string {
-            return KeepAwake.mode();
-        }
-
-        function setMode(mode: string): void {
-            KeepAwake.setMode(mode);
-        }
-
-        function lockAndBlank(): void {
-            KeepAwake.lockAndBlank();
+        function setCanScreenBlank(allowed: bool): void {
+            PersistentState.keepAwakeAllowScreenBlank = allowed;
         }
 
         target: "idleInhibitor"
